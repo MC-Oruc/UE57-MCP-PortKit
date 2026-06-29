@@ -193,13 +193,15 @@ def ensure_sparse_source(manifest: dict[str, Any], ref_override: str | None = No
 
     if not (source_dir / ".git").exists():
         clean_tree(source_dir)
-        source_dir.parent.mkdir(parents=True, exist_ok=True)
+        source_dir.mkdir(parents=True, exist_ok=True)
         log(f"Fetching UE 5.8 source sparsely into {source_dir}")
-        run(["git", "clone", "--filter=blob:none", "--sparse", "--no-checkout", repo, str(source_dir)])
+        run(["git", "init"], cwd=source_dir)
+        run(["git", "remote", "add", "origin", repo], cwd=source_dir)
+        run(["git", "sparse-checkout", "init", "--no-cone"], cwd=source_dir)
 
-    run(["git", "fetch", "--depth=1", "origin", ref], cwd=source_dir)
-    run(["git", "checkout", "FETCH_HEAD"], cwd=source_dir)
     run(["git", "sparse-checkout", "set", "--no-cone", *sparse_paths], cwd=source_dir)
+    run(["git", "fetch", "--depth=1", "--filter=tree:0", "origin", ref], cwd=source_dir)
+    run(["git", "checkout", "--force", "FETCH_HEAD"], cwd=source_dir)
 
     build_version = source_dir / "Engine/Build/Build.version"
     if build_version.exists():
@@ -257,7 +259,7 @@ def apply_patches(project_root: Path, manifest: dict[str, Any]) -> None:
             log(f"Skipping missing patch: {patch_name}")
             continue
         log(f"Applying patch: {patch_name}")
-        run(["git", "apply", "--3way", "--whitespace=nowarn", str(patch_path)], cwd=project_root)
+        run(["git", "apply", "--binary", "--3way", "--whitespace=nowarn", str(patch_path)], cwd=project_root)
 
 
 def get_local_plugins(manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -454,23 +456,42 @@ def create_patch(args: argparse.Namespace) -> None:
     patches_dir = KIT_DIR / "patches"
     patches_dir.mkdir(exist_ok=True)
 
-    temp_base = KIT_DIR / "temp" / "baseline"
-    temp_ported = KIT_DIR / "temp" / "ported"
+    temp_repo = KIT_DIR / "temp" / "diffrepo"
     clean_tree(KIT_DIR / "temp")
-    temp_base.mkdir(parents=True)
-    temp_ported.mkdir(parents=True)
+    temp_repo.mkdir(parents=True)
 
     try:
         for plugin in manifest["plugins"]:
-            copy_tree_filtered(source_root / plugin["source"], temp_base / "Plugins" / plugin["target"], manifest["ignore_patterns"])
-            copy_tree_filtered(project_root / "Plugins" / plugin["target"], temp_ported / "Plugins" / plugin["target"], manifest["ignore_patterns"])
+            copy_tree_filtered(source_root / plugin["source"], temp_repo / "Plugins" / plugin["target"], manifest["ignore_patterns"])
         for plugin in get_generated_plugins(manifest):
-            generate_plugin_from_source(source_root, plugin, temp_base / "Plugins" / plugin["target"])
-            copy_tree_filtered(project_root / "Plugins" / plugin["target"], temp_ported / "Plugins" / plugin["target"], manifest["ignore_patterns"])
+            generate_plugin_from_source(source_root, plugin, temp_repo / "Plugins" / plugin["target"])
+
+        run(["git", "init"], cwd=temp_repo)
+        run(["git", "add", "-A", "Plugins"], cwd=temp_repo)
+        run(
+            [
+                "git",
+                "-c",
+                "user.name=MCP PortKit",
+                "-c",
+                "user.email=mcp-portkit@example.invalid",
+                "commit",
+                "-m",
+                "baseline",
+            ],
+            cwd=temp_repo,
+        )
+
+        clean_tree(temp_repo / "Plugins")
+        (temp_repo / "Plugins").mkdir(parents=True)
+        for plugin in manifest["plugins"]:
+            copy_tree_filtered(project_root / "Plugins" / plugin["target"], temp_repo / "Plugins" / plugin["target"], manifest["ignore_patterns"])
+        for plugin in get_generated_plugins(manifest):
+            copy_tree_filtered(project_root / "Plugins" / plugin["target"], temp_repo / "Plugins" / plugin["target"], manifest["ignore_patterns"])
 
         output = subprocess.run(
-            ["git", "-c", "core.autocrlf=false", "diff", "--no-index", "baseline/Plugins", "ported/Plugins"],
-            cwd=str(KIT_DIR / "temp"),
+            ["git", "-c", "core.autocrlf=false", "diff", "--binary", "--no-ext-diff", "HEAD", "--", "Plugins"],
+            cwd=str(temp_repo),
             check=False,
             text=True,
             encoding="utf-8",
@@ -481,9 +502,6 @@ def create_patch(args: argparse.Namespace) -> None:
         if output.returncode not in (0, 1):
             raise PortKitError(f"git diff failed ({output.returncode}):\n{output.stderr}")
         patch_text = output.stdout or ""
-        patch_text = re.sub(r"([ab])/(baseline|ported)/Plugins/", r"\1/Plugins/", patch_text)
-        patch_text = patch_text.replace("rename from baseline/Plugins/", "rename from Plugins/")
-        patch_text = patch_text.replace("rename to ported/Plugins/", "rename to Plugins/")
         patch_path = patches_dir / manifest["generated_patch_name"]
         patch_path.write_text(patch_text, encoding="utf-8")
         log(f"Wrote patch: {patch_path}")
@@ -561,12 +579,23 @@ def main() -> int:
     parser.add_argument("--ue58-ref", help="Optional UE 5.8 source ref override")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("install")
+
+    def add_common_options(command_parser: argparse.ArgumentParser) -> None:
+        command_parser.add_argument("--project", help=argparse.SUPPRESS)
+        command_parser.add_argument("--engine-root", help=argparse.SUPPRESS)
+        command_parser.add_argument("--ue58-ref", help=argparse.SUPPRESS)
+
+    install_parser = subparsers.add_parser("install")
+    add_common_options(install_parser)
     create = subparsers.add_parser("create-patch")
+    add_common_options(create)
     create.add_argument("--ue58-source", help="Optional existing UE 5.8 source checkout")
-    subparsers.add_parser("clean")
-    subparsers.add_parser("doctor")
-    subparsers.add_parser("license-audit")
+    clean_parser = subparsers.add_parser("clean")
+    add_common_options(clean_parser)
+    doctor_parser = subparsers.add_parser("doctor")
+    add_common_options(doctor_parser)
+    audit_parser = subparsers.add_parser("license-audit")
+    add_common_options(audit_parser)
 
     args = parser.parse_args()
     try:
