@@ -27,13 +27,15 @@ The authoritative tool coverage report is the project-root
 Current report summary:
 
 - UE 5.8 total sub-tools: 853
-- Current UE 5.7 ported sub-tools: 423
-- Missing sub-tools: 430
-- Registered toolsets: 42
+- Current UE 5.7 ported sub-tools: 414
+- Missing sub-tools: 439
+- Registered toolsets: 40
 
-`install` enables all manifest plugins in the target `.uproject`.
-The update is idempotent: existing entries are reused, disabled entries are
-re-enabled, and duplicate entries for the same plugin are collapsed.
+`install` enables supported manifest plugins in the target `.uproject` and
+disables manifest-declared unsupported plugins.
+The update is idempotent: existing entries are reused, supported entries are
+enabled, unsupported entries are disabled, and duplicate entries for the same
+plugin are collapsed.
 
 ## Covered By Current Port
 
@@ -68,6 +70,7 @@ the current patch/import flow:
 | `DataflowAgent` | 0/22 | UE 5.8 uses public Dataflow edit helpers that are private/not available in UE 5.7. Needs a public adapter, not private header use. |
 | `MVVMToolset` | 0/9 | Needs deferred/lazy registration architecture. Short safe port was rolled back. |
 | `ChaosClothAssetToolset` | 0/6 | UE 5.8-only cloth asset editor API surface; skipped by rabbit-hole rule. |
+| `MetaHumanGenerator` | 0/9 | UE 5.8 Python expects `unreal.MetaHumanGeneratorSubsystemWrapper`, absent in UE 5.7. Requires a dedicated native bridge; disabled by default. |
 | `SemanticSearchToolset` | 0/2 | Depends on UE 5.8 `SemanticSearch` core plugin, absent in UE 5.7. |
 | `SequencerAnimMixerToolset` | 0/21 | Depends on UE 5.8 `MovieSceneAnimMixerScripting`, absent in UE 5.7. |
 

@@ -179,6 +179,64 @@ def copy_tree_filtered(src: Path, dst: Path, ignore_patterns: list[str]) -> None
     shutil.copytree(src, dst, ignore=ignore)
 
 
+def is_ignored_path(rel: Path, name: str, ignore_patterns: list[str]) -> bool:
+    rel_text = rel.as_posix()
+    for pattern in ignore_patterns:
+        if fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(rel_text, pattern):
+            return True
+    return False
+
+
+def same_text_ignoring_line_endings(src: Path, dst: Path) -> bool:
+    try:
+        src_bytes = src.read_bytes()
+        dst_bytes = dst.read_bytes()
+    except OSError:
+        return False
+    if b"\0" in src_bytes or b"\0" in dst_bytes:
+        return src_bytes == dst_bytes
+    try:
+        src_text = src_bytes.decode("utf-8")
+        dst_text = dst_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        return src_bytes == dst_bytes
+    return src_text.replace("\r\n", "\n") == dst_text.replace("\r\n", "\n")
+
+
+def sync_tree_filtered(src: Path, dst: Path, ignore_patterns: list[str]) -> None:
+    if not src.exists():
+        raise PortKitError(f"Missing source path: {src}")
+    dst.mkdir(parents=True, exist_ok=True)
+
+    for item in src.rglob("*"):
+        rel = item.relative_to(src)
+        if is_ignored_path(rel, item.name, ignore_patterns):
+            continue
+        target = dst / rel
+        if item.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists() and same_text_ignoring_line_endings(item, target):
+            continue
+        shutil.copy2(item, target)
+
+    for item in sorted(dst.rglob("*"), key=lambda path: len(path.parts), reverse=True):
+        rel = item.relative_to(dst)
+        if is_ignored_path(rel, item.name, ignore_patterns):
+            continue
+        source_item = src / rel
+        if source_item.exists():
+            continue
+        if item.is_dir():
+            try:
+                item.rmdir()
+            except OSError:
+                pass
+        else:
+            item.unlink()
+
+
 def ensure_sparse_source(manifest: dict[str, Any], ref_override: str | None = None) -> Path:
     source_cfg = manifest["source"]
     repo = source_cfg["repo"]
@@ -195,13 +253,16 @@ def ensure_sparse_source(manifest: dict[str, Any], ref_override: str | None = No
         clean_tree(source_dir)
         source_dir.mkdir(parents=True, exist_ok=True)
         log(f"Fetching UE 5.8 source sparsely into {source_dir}")
-        run(["git", "init"], cwd=source_dir)
+        run(["git", "init", "-q"], cwd=source_dir)
+        run(["git", "config", "advice.detachedHead", "false"], cwd=source_dir)
+        run(["git", "config", "core.autocrlf", "false"], cwd=source_dir)
+        run(["git", "config", "core.safecrlf", "false"], cwd=source_dir)
         run(["git", "remote", "add", "origin", repo], cwd=source_dir)
         run(["git", "sparse-checkout", "init", "--no-cone"], cwd=source_dir)
 
     run(["git", "sparse-checkout", "set", "--no-cone", *sparse_paths], cwd=source_dir)
     run(["git", "fetch", "--depth=1", "--filter=tree:0", "origin", ref], cwd=source_dir)
-    run(["git", "checkout", "--force", "FETCH_HEAD"], cwd=source_dir)
+    run(["git", "checkout", "--force", "-q", "FETCH_HEAD"], cwd=source_dir)
 
     build_version = source_dir / "Engine/Build/Build.version"
     if build_version.exists():
@@ -215,10 +276,11 @@ def ensure_sparse_source(manifest: dict[str, Any], ref_override: str | None = No
     return source_dir
 
 
-def update_uproject_plugins(uproject: Path, plugin_names: list[str]) -> None:
+def update_uproject_plugins(uproject: Path, plugin_names: list[str], disabled_plugin_names: list[str] | None = None) -> None:
     data = read_json(uproject)
     entries = data.setdefault("Plugins", [])
     requested = set(plugin_names)
+    disabled = set(disabled_plugin_names or [])
     normalized: list[Any] = []
     by_name: dict[str, dict[str, Any]] = {}
 
@@ -237,10 +299,15 @@ def update_uproject_plugins(uproject: Path, plugin_names: list[str]) -> None:
             if name in requested:
                 existing.update(entry)
                 existing["Enabled"] = True
+            if name in disabled:
+                existing.update(entry)
+                existing["Enabled"] = False
             continue
 
         if name in requested:
             entry["Enabled"] = True
+        if name in disabled:
+            entry["Enabled"] = False
         by_name[name] = entry
         normalized.append(entry)
 
@@ -248,8 +315,15 @@ def update_uproject_plugins(uproject: Path, plugin_names: list[str]) -> None:
         if name not in by_name:
             normalized.append({"Name": name, "Enabled": True, "TargetAllowList": ["Editor"]})
 
+    for name in disabled:
+        if name not in by_name:
+            normalized.append({"Name": name, "Enabled": False, "TargetAllowList": ["Editor"]})
+
     data["Plugins"] = normalized
-    write_json(uproject, data)
+    new_text = json.dumps(data, indent="\t", ensure_ascii=False) + "\n"
+    old_text = uproject.read_text(encoding="utf-8", errors="replace")
+    if old_text.replace("\r\n", "\n") != new_text.replace("\r\n", "\n"):
+        uproject.write_text(new_text, encoding="utf-8")
 
 
 def apply_patches(project_root: Path, manifest: dict[str, Any]) -> None:
@@ -259,7 +333,93 @@ def apply_patches(project_root: Path, manifest: dict[str, Any]) -> None:
             log(f"Skipping missing patch: {patch_name}")
             continue
         log(f"Applying patch: {patch_name}")
-        run(["git", "apply", "--binary", "--3way", "--whitespace=nowarn", str(patch_path)], cwd=project_root)
+        run(["git", "apply", "--binary", "--whitespace=nowarn", "--ignore-space-change", str(patch_path)], cwd=project_root)
+        remove_patch_deleted_files(project_root, patch_path)
+
+
+def apply_patches_to_git_workspace(project_root: Path, manifest: dict[str, Any]) -> None:
+    run(["git", "init", "-q"], cwd=project_root)
+    run(["git", "config", "core.autocrlf", "false"], cwd=project_root)
+    run(["git", "config", "core.safecrlf", "false"], cwd=project_root)
+    run(["git", "add", "-A", "Plugins"], cwd=project_root, capture=True)
+    run(
+        [
+            "git",
+            "-c",
+            "user.name=MCP PortKit",
+            "-c",
+            "user.email=mcp-portkit@example.invalid",
+            "commit",
+            "-m",
+            "baseline",
+        ],
+        cwd=project_root,
+        capture=True,
+    )
+    for patch_name in manifest.get("patches", []):
+        patch_path = KIT_DIR / "patches" / patch_name
+        if not patch_path.exists():
+            log(f"Skipping missing patch: {patch_name}")
+            continue
+        log(f"Applying patch: {patch_name}")
+        run(
+            ["git", "apply", "--binary", "--whitespace=nowarn", "--ignore-space-change", str(patch_path)],
+            cwd=project_root,
+        )
+
+
+def remove_patch_deleted_files(root: Path, patch_path: Path) -> None:
+    patch_lines = patch_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    for index, line in enumerate(patch_lines):
+        if not line.startswith("diff --git "):
+            continue
+        if index + 1 >= len(patch_lines) or patch_lines[index + 1] != "deleted file mode 100644":
+            continue
+        match = re.match(r"diff --git a/(.+?) b/\1$", line)
+        if not match:
+            continue
+        target = root / match.group(1)
+        try:
+            resolved = target.resolve()
+        except OSError:
+            continue
+        if root.resolve() not in [resolved, *resolved.parents]:
+            raise PortKitError(f"Refusing to delete outside install root: {target}")
+        if resolved.exists():
+            resolved.unlink()
+
+
+def prune_missing_uplugin_modules(root: Path) -> None:
+    plugins_root = root / "Plugins"
+    if not plugins_root.exists():
+        return
+
+    for descriptor in plugins_root.glob("*/*.uplugin"):
+        data = read_json(descriptor)
+        modules = data.get("Modules")
+        if not isinstance(modules, list):
+            continue
+
+        kept_modules: list[Any] = []
+        changed = False
+        plugin_root = descriptor.parent
+        for module in modules:
+            if not isinstance(module, dict):
+                kept_modules.append(module)
+                continue
+            name = str(module.get("Name", "")).strip()
+            if not name:
+                kept_modules.append(module)
+                continue
+            build_cs = plugin_root / "Source" / name / f"{name}.Build.cs"
+            if build_cs.exists():
+                kept_modules.append(module)
+            else:
+                changed = True
+
+        if changed:
+            data["Modules"] = kept_modules
+            write_json(descriptor, data)
 
 
 def get_local_plugins(manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -411,7 +571,19 @@ if report["status"] != "pass":
     probe = temp_dir / "mcp_probe.py"
     probe.write_text(script, encoding="utf-8")
     log("Running MCP probe")
-    run([str(editor), str(uproject), "-run=pythonscript", f"-script={probe}", "-unattended", "-nop4"], cwd=project_root)
+    result = subprocess.run(
+        [str(editor), str(uproject), "-run=pythonscript", f"-script={probe}", "-unattended", "-nop4"],
+        cwd=str(project_root),
+        check=False,
+    )
+    if not report_path.exists():
+        raise PortKitError(f"MCP probe did not produce a report. UnrealEditor-Cmd exit code: {result.returncode}")
+
+    report = read_json(report_path)
+    if report.get("status") != "pass":
+        raise PortKitError(f"MCP probe failed. See {report_path}")
+    if result.returncode != 0:
+        log(f"MCP probe passed; UnrealEditor-Cmd returned {result.returncode} because of non-probe startup errors")
 
 
 def install(args: argparse.Namespace) -> None:
@@ -423,26 +595,44 @@ def install(args: argparse.Namespace) -> None:
     plugins_dir = project_root / "Plugins"
     plugins_dir.mkdir(exist_ok=True)
     ignore_patterns = manifest["ignore_patterns"]
+
+    temp_install = KIT_DIR / "temp" / "install"
+    clean_tree(temp_install)
+    (temp_install / "Plugins").mkdir(parents=True)
+
     for plugin in manifest["plugins"]:
         src = source_root / plugin["source"]
-        dst = plugins_dir / plugin["target"]
-        log(f"Importing {plugin['name']}")
+        dst = temp_install / "Plugins" / plugin["target"]
+        log(f"Preparing {plugin['name']}")
         copy_tree_filtered(src, dst, ignore_patterns)
     for plugin in get_generated_plugins(manifest):
-        dst = plugins_dir / plugin["target"]
+        dst = temp_install / "Plugins" / plugin["target"]
         log(f"Generating {plugin['name']} from licensed UE source")
         generate_plugin_from_source(source_root, plugin, dst)
+
+    apply_patches_to_git_workspace(temp_install, manifest)
+    prune_missing_uplugin_modules(temp_install)
+
+    for plugin in manifest["plugins"]:
+        src = temp_install / "Plugins" / plugin["target"]
+        dst = plugins_dir / plugin["target"]
+        log(f"Installing {plugin['name']}")
+        sync_tree_filtered(src, dst, ignore_patterns)
+    for plugin in get_generated_plugins(manifest):
+        src = temp_install / "Plugins" / plugin["target"]
+        dst = plugins_dir / plugin["target"]
+        log(f"Installing {plugin['name']}")
+        sync_tree_filtered(src, dst, ignore_patterns)
     for plugin in get_local_plugins(manifest):
         src = KIT_DIR / "owned" / plugin["source"]
         dst = plugins_dir / plugin["target"]
         log(f"Installing local plugin {plugin['name']}")
-        copy_tree_filtered(src, dst, ignore_patterns)
+        sync_tree_filtered(src, dst, ignore_patterns)
 
-    apply_patches(project_root, manifest)
     enabled_plugins = [plugin["target"] for plugin in manifest["plugins"] if plugin.get("enable", True)]
     enabled_plugins.extend(plugin["target"] for plugin in get_generated_plugins(manifest) if plugin.get("enable", True))
     enabled_plugins.extend(plugin["target"] for plugin in get_local_plugins(manifest) if plugin.get("enable", True))
-    update_uproject_plugins(uproject, enabled_plugins)
+    update_uproject_plugins(uproject, enabled_plugins, list(manifest.get("disabled_plugins", [])))
     build_project(project_root, uproject, engine_root)
     run_mcp_probe(project_root, uproject, engine_root, manifest)
     clean_tree(KIT_DIR / "temp")
@@ -466,8 +656,10 @@ def create_patch(args: argparse.Namespace) -> None:
         for plugin in get_generated_plugins(manifest):
             generate_plugin_from_source(source_root, plugin, temp_repo / "Plugins" / plugin["target"])
 
-        run(["git", "init"], cwd=temp_repo)
-        run(["git", "add", "-A", "Plugins"], cwd=temp_repo)
+        run(["git", "init", "-q"], cwd=temp_repo)
+        run(["git", "config", "core.autocrlf", "false"], cwd=temp_repo)
+        run(["git", "config", "core.safecrlf", "false"], cwd=temp_repo)
+        run(["git", "add", "-A", "Plugins"], cwd=temp_repo, capture=True)
         run(
             [
                 "git",
@@ -480,6 +672,7 @@ def create_patch(args: argparse.Namespace) -> None:
                 "baseline",
             ],
             cwd=temp_repo,
+            capture=True,
         )
 
         clean_tree(temp_repo / "Plugins")
@@ -489,8 +682,9 @@ def create_patch(args: argparse.Namespace) -> None:
         for plugin in get_generated_plugins(manifest):
             copy_tree_filtered(project_root / "Plugins" / plugin["target"], temp_repo / "Plugins" / plugin["target"], manifest["ignore_patterns"])
 
+        run(["git", "add", "-A", "Plugins"], cwd=temp_repo, capture=True)
         output = subprocess.run(
-            ["git", "-c", "core.autocrlf=false", "diff", "--binary", "--no-ext-diff", "HEAD", "--", "Plugins"],
+            ["git", "-c", "core.autocrlf=false", "diff", "--cached", "--binary", "--no-ext-diff", "HEAD", "--", "Plugins"],
             cwd=str(temp_repo),
             check=False,
             text=True,

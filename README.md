@@ -20,8 +20,8 @@ If a tool appears in MCP schema, it is expected to work.
 
 Current port coverage:
 
-- 423 available MCP sub-tools
-- 42 registered toolsets
+- 414 available MCP sub-tools
+- 40 registered toolsets
 - UE 5.8 source baseline pinned to `5.8.0-release`
 - UE 5.7 project-plugin install, no engine source patch
 
@@ -36,7 +36,6 @@ Included/high-value toolset groups:
 | SlateInspectorToolset | 14 |
 | GASToolsets | 14 |
 | StateTreeToolset | 9 |
-| MetaHumanGenerator | 9 |
 | ConfigSettingsToolset | 8 |
 | AIModuleToolset | 7 |
 | AutomationTestToolset | 7 |
