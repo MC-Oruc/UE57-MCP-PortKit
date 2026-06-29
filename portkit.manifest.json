@@ -1,0 +1,226 @@
+{
+	"source": {
+		"repo": "https://github.com/EpicGames/UnrealEngine.git",
+		"ref": "7deeb413d3dc1fc034f48d1aacc0861301829d32",
+		"expected_build": {
+			"MajorVersion": 5,
+			"MinorVersion": 8,
+			"PatchVersion": 0,
+			"BranchName": "UE5"
+		}
+	},
+	"generated_patch_name": "0001-generated-ue57-port.patch",
+	"patches": [
+		"0001-generated-ue57-port.patch"
+	],
+	"ignore_patterns": [
+		"Binaries",
+		"Binaries/**",
+		"Intermediate",
+		"Intermediate/**",
+		"Saved",
+		"Saved/**",
+		"DerivedDataCache",
+		"DerivedDataCache/**",
+		".vs",
+		".vs/**",
+		"*.dll",
+		"*.pdb",
+		"*.obj",
+		"*.lib",
+		"*.exp",
+		"*.modules",
+		"*.target",
+		"*.log",
+		"*.tmp",
+		"__pycache__",
+		"__pycache__/**",
+		"*.pyc",
+		"*.pyo",
+		"*.generated.h",
+		"*.gen.cpp",
+		"Timestamp"
+	],
+	"plugins": [
+		{
+			"name": "FileSandbox",
+			"source": "Engine/Plugins/Developer/Sandbox/FileSandbox",
+			"target": "FileSandbox",
+			"enable": true
+		},
+		{
+			"name": "ModelContextProtocol",
+			"source": "Engine/Plugins/Experimental/ModelContextProtocol",
+			"target": "ModelContextProtocol",
+			"enable": true
+		},
+		{
+			"name": "MCPClientToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/MCPClientToolset",
+			"target": "MCPClientToolset",
+			"enable": true
+		},
+		{
+			"name": "ToolsetRegistry",
+			"source": "Engine/Plugins/Experimental/ToolsetRegistry",
+			"target": "ToolsetRegistry",
+			"enable": true
+		},
+		{
+			"name": "EditorToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/EditorToolset",
+			"target": "EditorToolset",
+			"enable": true
+		},
+		{
+			"name": "AIModuleToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/AIModuleToolset",
+			"target": "AIModuleToolset",
+			"enable": true
+		},
+		{
+			"name": "AutomationTestToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/AutomationTestToolset",
+			"target": "AutomationTestToolset",
+			"enable": true
+		},
+		{
+			"name": "ConfigSettingsToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/ConfigSettingsToolset",
+			"target": "ConfigSettingsToolset",
+			"enable": true
+		},
+		{
+			"name": "ConversationToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/ConversationToolset",
+			"target": "ConversationToolset",
+			"enable": true
+		},
+		{
+			"name": "DataRegistryToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/DataRegistryToolset",
+			"target": "DataRegistryToolset",
+			"enable": true
+		},
+		{
+			"name": "GameFeaturesToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/GameFeaturesToolset",
+			"target": "GameFeaturesToolset",
+			"enable": true
+		},
+		{
+			"name": "GameplayTagsToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/GameplayTagsToolset",
+			"target": "GameplayTagsToolset",
+			"enable": true
+		},
+		{
+			"name": "GASToolsets",
+			"source": "Engine/Plugins/Experimental/Toolsets/GASToolsets",
+			"target": "GASToolsets",
+			"enable": true
+		},
+		{
+			"name": "LiveCodingToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/LiveCodingToolset",
+			"target": "LiveCodingToolset",
+			"enable": true
+		},
+		{
+			"name": "MetaHumanGenerator",
+			"source": "Engine/Plugins/Experimental/Toolsets/MetaHumanGenerator",
+			"target": "MetaHumanGenerator",
+			"enable": true
+		},
+		{
+			"name": "NiagaraToolsets",
+			"source": "Engine/Plugins/Experimental/Toolsets/NiagaraToolsets",
+			"target": "NiagaraToolsets",
+			"enable": true
+		},
+		{
+			"name": "PCGToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/PCGToolset",
+			"target": "PCGToolset",
+			"enable": true
+		},
+		{
+			"name": "PhysicsToolsets",
+			"source": "Engine/Plugins/Experimental/Toolsets/PhysicsToolsets",
+			"target": "PhysicsToolsets",
+			"enable": true
+		},
+		{
+			"name": "PluginToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/PluginToolset",
+			"target": "PluginToolset",
+			"enable": true
+		},
+		{
+			"name": "SlateInspectorToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/SlateInspectorToolset",
+			"target": "SlateInspectorToolset",
+			"enable": true
+		},
+		{
+			"name": "StateTreeToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/StateTreeToolset",
+			"target": "StateTreeToolset",
+			"enable": true
+		},
+		{
+			"name": "WorldConditionsToolset",
+			"source": "Engine/Plugins/Experimental/Toolsets/WorldConditionsToolset",
+			"target": "WorldConditionsToolset",
+			"enable": true
+		}
+	],
+	"local_plugins": [
+		{
+			"name": "BlueprintEditorBridge",
+			"source": "BlueprintEditorBridge",
+			"target": "BlueprintEditorBridge",
+			"enable": true
+		}
+	],
+	"generated_plugins": [
+		{
+			"name": "JsonUtilitiesEditor",
+			"target": "JsonUtilitiesEditor",
+			"enable": true,
+			"source_files": [
+				{
+					"source": "Engine/Source/Runtime/JsonUtilities/Public/JsonSchema/JsonSchemaGenerator.h",
+					"target": "Source/JsonUtilitiesEditor/Public/JsonSchema/JsonSchemaGenerator.h"
+				},
+				{
+					"source": "Engine/Source/Runtime/JsonUtilities/Private/JsonSchema/JsonSchemaGenerator.cpp",
+					"target": "Source/JsonUtilitiesEditor/Private/JsonSchema/JsonSchemaGenerator.cpp"
+				},
+				{
+					"source": "Engine/Source/Runtime/JsonUtilities/Public/JsonSchema/JsonSchemaPropertyFilter.h",
+					"target": "Source/JsonUtilitiesEditor/Public/JsonSchema/JsonSchemaPropertyFilter.h"
+				},
+				{
+					"source": "Engine/Source/Runtime/JsonUtilities/Public/JsonSchema/JsonSchemaEditorMetadata.h",
+					"target": "Source/JsonUtilitiesEditor/Public/JsonSchema/JsonSchemaEditorMetadata.h"
+				},
+				{
+					"source": "Engine/Source/Editor/JsonUtilitiesEditor/Public/JsonSchema/JsonSchemaGeneratorEditor.h",
+					"target": "Source/JsonUtilitiesEditor/Public/JsonSchema/JsonSchemaGeneratorEditor.h"
+				},
+				{
+					"source": "Engine/Source/Editor/JsonUtilitiesEditor/Private/JsonSchema/JsonSchemaGeneratorEditor.cpp",
+					"target": "Source/JsonUtilitiesEditor/Private/JsonSchema/JsonSchemaGeneratorEditor.cpp"
+				}
+			]
+		}
+	],
+	"expected_toolsets": {
+		"EditorToolset.BlueprintTools": 53,
+		"EditorToolset.MaterialInstanceTools": 13,
+		"EditorToolset.MaterialTools": 22,
+		"PCGToolset.PCGToolset": 30,
+		"PCGToolset.PCGSpatialToolset": 1
+	}
+}

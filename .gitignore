@@ -1,0 +1,28 @@
+cache/
+temp/
+reports/
+__pycache__/
+*.pyc
+*.pyo
+
+# Unreal/generated artifacts
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+.vs/
+*.dll
+*.pdb
+*.obj
+*.lib
+*.exp
+*.modules
+*.target
+*.log
+*.tmp
+
+# Local editor/system files
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
