@@ -71,13 +71,35 @@ The UE 5.7 engine root is detected from the `.uproject`, `UE_ROOT`,
 
 Run from your Unreal project root:
 
+Recommended project-tracked install:
+
+```powershell
+git submodule add https://github.com/MC-Oruc/UE57-MCP-PortKit.git Scripts/ModelContextProtocolPort
+python Scripts/ModelContextProtocolPort/mcp_port_kit.py install
+```
+
+For a project that already tracks this as a submodule, fresh clones can use:
+
+```powershell
+git clone --recurse-submodules <your-project-repo-url>
+```
+
+If the project was cloned without submodules:
+
+```powershell
+git submodule update --init --recursive
+```
+
+Local one-off install without tracking it in the parent repo:
+
 ```powershell
 git clone https://github.com/MC-Oruc/UE57-MCP-PortKit.git Scripts/ModelContextProtocolPort
 python Scripts/ModelContextProtocolPort/mcp_port_kit.py install
 ```
 
-`git clone <repo> Scripts/ModelContextProtocolPort` clones directly into that
-folder. It does not create an extra `UE57-MCP-PortKit` directory.
+Both `git submodule add <repo> Scripts/ModelContextProtocolPort` and
+`git clone <repo> Scripts/ModelContextProtocolPort` place the kit directly in
+that folder. They do not create an extra `UE57-MCP-PortKit` directory.
 
 The installer:
 
