@@ -22,8 +22,11 @@
 		"Saved/**",
 		"DerivedDataCache",
 		"DerivedDataCache/**",
+		"Resources",
+		"Resources/**",
 		".vs",
 		".vs/**",
+		"*.png",
 		"*.dll",
 		"*.pdb",
 		"*.obj",
@@ -127,12 +130,6 @@
 			"enable": true
 		},
 		{
-			"name": "MetaHumanGenerator",
-			"source": "Engine/Plugins/Experimental/Toolsets/MetaHumanGenerator",
-			"target": "MetaHumanGenerator",
-			"enable": true
-		},
-		{
 			"name": "NiagaraToolsets",
 			"source": "Engine/Plugins/Experimental/Toolsets/NiagaraToolsets",
 			"target": "NiagaraToolsets",
@@ -182,6 +179,9 @@
 			"target": "BlueprintEditorBridge",
 			"enable": true
 		}
+	],
+	"disabled_plugins": [
+		"MetaHumanGenerator"
 	],
 	"generated_plugins": [
 		{
