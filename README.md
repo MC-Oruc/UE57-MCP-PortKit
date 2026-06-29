@@ -83,7 +83,8 @@ The installer:
 
 - Finds the target `.uproject`
 - Finds the UE 5.7 engine root
-- Sparse-fetches only the required UE 5.8 source paths
+- Sparse-fetches only the required UE 5.8 source paths with a shallow
+  treeless Git fetch
 - Imports required plugins into `Plugins/`
 - Generates compatibility support code where needed
 - Applies the UE 5.7 port patch
