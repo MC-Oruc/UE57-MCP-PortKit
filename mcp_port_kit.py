@@ -535,6 +535,7 @@ def run_mcp_probe(project_root: Path, uproject: Path, engine_root: Path, manifes
     reports = KIT_DIR / "reports"
     reports.mkdir(parents=True, exist_ok=True)
     report_path = reports / "mcp_probe.json"
+    report_arg = report_path.resolve().as_posix()
 
     script = f"""
 import json
@@ -561,7 +562,7 @@ try:
 except Exception as exc:
     report["status"] = "fail"
     report["errors"].append(str(exc))
-with open(r"{report_path}", "w", encoding="utf-8") as handle:
+with open("{report_arg}", "w", encoding="utf-8") as handle:
     json.dump(report, handle, indent=2)
 if report["status"] != "pass":
     raise RuntimeError(report["errors"])
@@ -571,8 +572,10 @@ if report["status"] != "pass":
     probe = temp_dir / "mcp_probe.py"
     probe.write_text(script, encoding="utf-8")
     log("Running MCP probe")
+    probe_arg = probe.resolve().as_posix()
+    project_arg = uproject.resolve().as_posix()
     result = subprocess.run(
-        [str(editor), str(uproject), "-run=pythonscript", f"-script={probe}", "-unattended", "-nop4"],
+        [str(editor), project_arg, "-run=pythonscript", f"-script={probe_arg}", "-unattended", "-nop4"],
         cwd=str(project_root),
         check=False,
     )
