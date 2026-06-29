@@ -21,8 +21,7 @@ UE5
 ```
 
 The authoritative import/plugin list is `../portkit.manifest.json`.
-The authoritative tool coverage report is the project-root
-`MCP Validaiton Report.md`.
+The authoritative tool coverage report is `docs/ValidationReport.md`.
 
 Current report summary:
 
