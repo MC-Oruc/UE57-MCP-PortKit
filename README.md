@@ -51,6 +51,7 @@ Included/high-value toolset groups:
 For the full matrix, skipped areas, and known limitations, see:
 
 - `docs/PortMatrix.md`
+- `docs/ValidationReport.md`
 - `docs/KnownIssues.md`
 - `docs/Licensing.md`
 
