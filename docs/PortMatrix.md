@@ -23,6 +23,15 @@ UE5
 The authoritative import/plugin list is `../portkit.manifest.json`.
 The authoritative tool coverage report is `docs/ValidationReport.md`.
 
+## Project Extensions
+
+These are intentional project additions on top of the UE 5.8 parity matrix:
+
+- `EditorToolset.EditorAppToolset.ExecuteConsoleCommand`: executes editor console commands such as `viewmode unlit`.
+- `editor_toolset.toolsets.asset.AssetTools.find_assets`: enhanced `name` matching. The same `name` argument supports both case-insensitive substring matching and wildcard matching with `*` / `?`.
+
+They are not counted in the UE 5.8 parity sub-tool totals.
+
 Current report summary:
 
 - UE 5.8 total sub-tools: 853
@@ -43,7 +52,7 @@ the current patch/import flow:
 
 | Group | Coverage |
 | :--- | :--- |
-| `EditorToolset` | 251/251 |
+| `EditorToolset` | 251/251 + project extensions |
 | `PCGToolset` | 31/31 |
 | `AIModuleToolset` | 7/7 |
 | `AutomationTestToolset` | 7/7 |

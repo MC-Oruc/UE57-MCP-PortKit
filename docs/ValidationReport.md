@@ -9,6 +9,13 @@ Sources:
 
 Rule: `Available` means the tool is advertised by the validated MCP health schema. Runtime smoke coverage is limited to the PortKit health/probe workflow.
 
+## Project Extensions
+
+The UE 5.8 parity totals below do not count these project-specific additions:
+
+- `EditorToolset.EditorAppToolset.ExecuteConsoleCommand`: runs editor console commands such as `viewmode unlit`.
+- `editor_toolset.toolsets.asset.AssetTools.find_assets`: enhanced `name` filtering. The same `name` argument now matches case-insensitive substring text and wildcard patterns with `*` / `?`.
+
 ## Summary
 
 - UE 5.8 total sub-tools: **853**
@@ -247,6 +254,7 @@ Group names are shown as sections instead of repeated table cells.
 | `duplicate` | 🟢 Available | `editor_toolset.toolsets.asset.AssetTools.duplicate` |
 | `exists` | 🟢 Available | `editor_toolset.toolsets.asset.AssetTools.exists` |
 | `find_assets` | 🟢 Available | `editor_toolset.toolsets.asset.AssetTools.find_assets` |
+| `find_assets` name wildcard matching | 🟢 Project extension | Same `name` argument supports substring OR wildcard (`*`, `?`) |
 | `get_asset_class` | 🟢 Available | `editor_toolset.toolsets.asset.AssetTools.get_asset_class` |
 | `get_asset_tags` | 🟢 Available | `editor_toolset.toolsets.asset.AssetTools.get_asset_tags` |
 | `get_dependencies` | 🟢 Available | `editor_toolset.toolsets.asset.AssetTools.get_dependencies` |
@@ -374,6 +382,7 @@ Group names are shown as sections instead of repeated table cells.
 | `OpenEditorForAsset` | 🟢 Available | `EditorToolset.EditorAppToolset.OpenEditorForAsset` |
 | `ScreenCoordsToWorld` | 🟢 Available | `EditorToolset.EditorAppToolset.ScreenCoordsToWorld` |
 | `SearchCVars` | 🟢 Available | `EditorToolset.EditorAppToolset.SearchCVars` |
+| `ExecuteConsoleCommand` | 🟢 Project extension | `EditorToolset.EditorAppToolset.ExecuteConsoleCommand` |
 | `SelectActors` | 🟢 Available | `EditorToolset.EditorAppToolset.SelectActors` |
 | `SelectAssets` | 🟢 Available | `EditorToolset.EditorAppToolset.SelectAssets` |
 | `SetCameraTransform` | 🟢 Available | `EditorToolset.EditorAppToolset.SetCameraTransform` |
@@ -1835,7 +1844,7 @@ Karar:
 Status: **Tamamlandı**
 
 Eklenenler:
-- `EditorToolset` modülü altında `SoCMaterialEditorBridgeLibrary` C++ köprü sınıfı oluşturuldu.
+- `EditorToolset` modülü altında project-local material editor bridge C++ sınıfı oluşturuldu.
 - `GetMaterialExpressions`, `DeleteUnusedExpressions`, `DisconnectMaterialExpressions` gibi eksik olan 8 adet fonksiyon C++ tarafında UE 5.7 API'leri ile simüle edilerek yazıldı.
 - `material.py` üzerindeki yönlendirmeler C++ köprüsüne bağlandı.
 - `_TOOLSET_SPECS` listesine eklenerek yükleyicide aktif hale getirildi.
@@ -2132,5 +2141,3 @@ Karar:
   - Adapter sadece UE 5.7 public Dataflow/DataflowEditor API'lerine bağlanır.
   - Önce read-only tools, sonra mutation tools, en son asset/template tools denenir.
 - İlk hedef 22/22 zorlamak değil; çalışan, headless-safe, public API tabanlı subset kazanmaktır.
-
-
