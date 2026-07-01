@@ -7,6 +7,15 @@ An automated utility and patch kit to backport Unreal Engine 5.8 Model Context P
 
 This kit does not vendor Unreal Engine source code. Instead, it securely sparse-fetches the pinned UE 5.8 source code from your licensed Epic Games GitHub repository, ports the plugins directly into your project's local directory, applies a pre-configured compatibility patch, builds the target, and verifies the schema.
 
+## Project Extensions
+
+This PortKit also carries two project-specific usability extensions on top of the pinned UE 5.8 parity surface:
+
+- `EditorToolset.EditorAppToolset.ExecuteConsoleCommand`: runs editor console commands such as `viewmode unlit`.
+- `editor_toolset.toolsets.asset.AssetTools.find_assets`: the existing `name` filter now matches both case-insensitive substring text and wildcard patterns with `*` / `?` in the same argument.
+
+These extensions are intentional project additions. They are not counted as UE 5.8 parity sub-tools.
+
 ---
 
 ## Technical Overview & Installation Flow
@@ -48,13 +57,13 @@ Run these commands inside the `Scripts/ModelContextProtocolPort` directory:
 
 ## Available MCP Toolset Coverage
 
-The PortKit provides access to **414 sub-tools** across **40 registered toolsets** (pinned to UE 5.8.0-release). 
+The PortKit provides access to **414 UE 5.8 parity sub-tools** across **40 registered toolsets** (pinned to UE 5.8.0-release), plus the project extensions listed above.
 
 ### High-Level Summary
 
 | Toolset Group | Purpose / Scope | Available Tools |
 | :--- | :--- | ---: |
-| **EditorToolset** | Actors, Assets, Blueprints, Materials, Textures, Tables, Logs, Scene, etc. | 251 |
+| **EditorToolset** | Actors, Assets, Blueprints, Materials, Textures, Tables, Logs, Scene, etc. | 251 + project extensions |
 | **PCG & Spatial** | Procedural Content Generation and Spatial Queries | 31 |
 | **Physics** | Colliders, Trace, Raycast, and Physics Queries | 17 |
 | **Plugins** | Module state tracking, load/unload, and registry queries | 17 |
@@ -83,12 +92,12 @@ Here is the exact list of the 40 toolsets registered and verified by the PortKit
 | **ConversationToolset** | `ConversationTools` | 7 / 7 | 🟢 Complete |
 | **DataRegistryToolset** | `DataRegistryTools` | 7 / 7 | 🟢 Complete |
 | **EditorToolset** | `ActorTools` | 17 / 17 | 🟢 Complete |
-| | `AssetTools` | 21 / 21 | 🟢 Complete |
+| | `AssetTools` | 21 / 21 + enhanced `find_assets` name matching | 🟢 Complete + project extension |
 | | `BlueprintTools` | 53 / 53 | 🟢 Complete |
 | | `CurveTableTools` | 9 / 9 | 🟢 Complete |
 | | `DataAssetTools` | 1 / 1 | 🟢 Complete |
 | | `DataTableTools` | 10 / 10 | 🟢 Complete |
-| | `EditorAppToolset` | 21 / 21 | 🟢 Complete |
+| | `EditorAppToolset` | 21 / 21 + `ExecuteConsoleCommand` | 🟢 Complete + project extension |
 | | `LogsToolset` | 4 / 4 | 🟢 Complete |
 | | `MaterialInstanceTools` | 13 / 13 | 🟢 Complete |
 | | `MaterialTools` | 22 / 22 | 🟢 Complete |

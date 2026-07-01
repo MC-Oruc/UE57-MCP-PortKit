@@ -2093,10 +2093,10 @@ index 0000000..e07a50f
 +                ActorTools.set_parent_component(component, component)
 diff --git a/Plugins/EditorToolset/Content/Python/editor_toolset/tests/test_asset.py b/Plugins/EditorToolset/Content/Python/editor_toolset/tests/test_asset.py
 new file mode 100644
-index 0000000..41944dc
+index 0000000..29b6d79
 --- /dev/null
 +++ b/Plugins/EditorToolset/Content/Python/editor_toolset/tests/test_asset.py
-@@ -0,0 +1,616 @@
+@@ -0,0 +1,622 @@
 +# Copyright Epic Games, Inc. All Rights Reserved.
 +
 +from contextlib import ExitStack
@@ -2296,6 +2296,12 @@ index 0000000..41944dc
 +            results = AssetTools.find_assets(test_folder, name='action')
 +            self.assertIn(f'{test_folder}MyAction', results)
 +            self.assertNotIn(f'{test_folder}OtherAsset', results)
++
++    def test_find_assets_name_wildcard_filter(self):
++        """Ensures find_assets supports case-insensitive wildcard matching."""
++        results = AssetTools.find_assets('/Engine/BasicShapes', name='c?be')
++        self.assertIn('/Engine/BasicShapes/Cube', results)
++        self.assertNotIn('/Engine/BasicShapes/Cone', results)
 +
 +    def test_find_assets_returns_package_paths(self):
 +        """Ensures find_assets returns clean package paths without a .ObjectName suffix."""
@@ -12254,14 +12260,15 @@ index 0000000..292293c
 +            sds.k2_gather_subobject_data_for_instance(actor))  # type: ignore
 diff --git a/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/asset.py b/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/asset.py
 new file mode 100644
-index 0000000..cb7d354
+index 0000000..e74b5a6
 --- /dev/null
 +++ b/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/asset.py
-@@ -0,0 +1,641 @@
+@@ -0,0 +1,651 @@
 +# Copyright Epic Games, Inc. All Rights Reserved.
 +
 +from __future__ import annotations
 +
++import fnmatch
 +import json
 +import os
 +
@@ -12445,8 +12452,9 @@ index 0000000..cb7d354
 +            folder_path: The folder to search within. Pass an empty string to search
 +                         the entire project (/Game/ and all plugin content folders including
 +                         project plugins and engine plugins).
-+            name: If set, will only return assets whose name contains this string
-+                  (case-insensitive).
++            name: If set, filters asset names case-insensitively. Matches when
++                  the asset name contains this text or when this text matches as
++                  a wildcard pattern using '*' or '?'.
 +            asset_type: If set, will only return assets that are of this type.
 +            recursive: Whether to search subfolders or not.
 +            tags: If set, will only return assets whose asset registry tags contain
@@ -12477,12 +12485,20 @@ index 0000000..cb7d354
 +
 +        seen: set[str] = set()
 +        name_lower = name.lower()
++        def matches_name(asset_name: str) -> bool:
++            if not name:
++                return True
++            asset_name_lower = asset_name.lower()
++            return (
++                name_lower in asset_name_lower or
++                fnmatch.fnmatchcase(asset_name_lower, name_lower))
++
 +        found_assets: list[str] = []
 +        for ad in asset_data_list:
 +            package_name = str(ad.package_name)
 +            parts = package_name.split('/')
 +            if (package_name in seen or
-+                (name and name_lower not in str(ad.asset_name).lower()) or
++                not matches_name(str(ad.asset_name)) or
 +                # Skip per-actor level assets (legacy Actors/ and WP __ExternalActors__);
 +                # these are scene actors and should be used via the actor interface.
 +                'Actors' in parts or '__ExternalActors__' in parts):
@@ -24494,7 +24510,7 @@ index 0000000..39b639c
 +	static void MarkChanged(UCurveTable* CurveTable);
 +};
 diff --git a/Plugins/EditorToolset/Source/EditorToolset/Private/EditorAppToolset.cpp b/Plugins/EditorToolset/Source/EditorToolset/Private/EditorAppToolset.cpp
-index 060e67f..b94a387 100644
+index 060e67f..a162065 100644
 --- a/Plugins/EditorToolset/Source/EditorToolset/Private/EditorAppToolset.cpp
 +++ b/Plugins/EditorToolset/Source/EditorToolset/Private/EditorAppToolset.cpp
 @@ -7,6 +7,7 @@
@@ -24590,7 +24606,40 @@ index 060e67f..b94a387 100644
  	// Helper that renders an asset thumbnail and resolves a result.
  	// Initiates an async load then polls each tick until the asset is loaded and
  	// all compilation (assets and shaders) is complete before rendering.
-@@ -315,7 +394,7 @@ TArray<AActor*> UEditorAppToolset::GetSelectedActors()
+@@ -227,6 +306,32 @@ FString UEditorAppToolset::SearchCVars(const FString& Name)
+ 	return JsonString;
+ }
+ 
++bool UEditorAppToolset::ExecuteConsoleCommand(const FString& Command)
++{
++	if (!GEditor)
++	{
++		RaiseEditorToolsetScriptError(TEXT("Editor not found."));
++		return false;
++	}
++
++	if (Command.TrimStartAndEnd().IsEmpty())
++	{
++		RaiseEditorToolsetScriptError(TEXT("Command cannot be empty."));
++		return false;
++	}
++
++	UWorld* World = nullptr;
++	if (GEditor->PlayWorld)
++	{
++		World = GEditor->PlayWorld.Get();
++	}
++	else
++	{
++		World = GEditor->GetEditorWorldContext().World();
++	}
++	return GEditor->Exec(World, *Command);
++}
++
+ TSharedPtr<FJsonObject> UEditorAppToolset::CVarToJson(IConsoleObject* CVar)
+ {
+ 	if (!CVar || !CVar->IsEnabled())
+@@ -315,7 +420,7 @@ TArray<AActor*> UEditorAppToolset::GetSelectedActors()
  	TArray<AActor*> Result;
  	if (!GEditor)
  	{
@@ -24599,7 +24648,7 @@ index 060e67f..b94a387 100644
  		return Result;
  	}
  	for (FSelectionIterator Iter(*GEditor->GetSelectedActors()); Iter; ++Iter)
-@@ -332,7 +411,7 @@ void UEditorAppToolset::SelectActors(const TArray<AActor*>& Actors)
+@@ -332,7 +437,7 @@ void UEditorAppToolset::SelectActors(const TArray<AActor*>& Actors)
  {
  	if (!GEditor)
  	{
@@ -24608,7 +24657,7 @@ index 060e67f..b94a387 100644
  		return;
  	}
  	USelection* Selection = GEditor->GetSelectedActors();
-@@ -354,7 +433,7 @@ FTransform UEditorAppToolset::GetCameraTransform()
+@@ -354,7 +459,7 @@ FTransform UEditorAppToolset::GetCameraTransform()
  {
  	if (!GCurrentLevelEditingViewportClient)
  	{
@@ -24617,7 +24666,7 @@ index 060e67f..b94a387 100644
  		return FTransform::Identity;
  	}
  	return FTransform(
-@@ -366,7 +445,7 @@ void UEditorAppToolset::SetCameraTransform(const FTransform& Transform)
+@@ -366,7 +471,7 @@ void UEditorAppToolset::SetCameraTransform(const FTransform& Transform)
  {
  	if (!GCurrentLevelEditingViewportClient)
  	{
@@ -24626,7 +24675,7 @@ index 060e67f..b94a387 100644
  		return;
  	}
  	GCurrentLevelEditingViewportClient->SetViewLocationForOrbiting(Transform.GetLocation());
-@@ -378,12 +457,12 @@ void UEditorAppToolset::FocusOnActors(const TArray<AActor*>& Actors)
+@@ -378,12 +483,12 @@ void UEditorAppToolset::FocusOnActors(const TArray<AActor*>& Actors)
  {
  	if (!GEditor)
  	{
@@ -24641,7 +24690,7 @@ index 060e67f..b94a387 100644
  		return;
  	}
  
-@@ -395,13 +474,13 @@ TArray<AActor*> UEditorAppToolset::GetVisibleActors()
+@@ -395,13 +500,13 @@ TArray<AActor*> UEditorAppToolset::GetVisibleActors()
  	TArray<AActor*> Result;
  	if (!GEditor || !GCurrentLevelEditingViewportClient || !GCurrentLevelEditingViewportClient->Viewport)
  	{
@@ -24657,7 +24706,7 @@ index 060e67f..b94a387 100644
  		return Result;
  	}
  	FLevelEditorViewportClient* LevelVC = GCurrentLevelEditingViewportClient;
-@@ -427,21 +506,19 @@ FVector2D UEditorAppToolset::WorldPosToScreenCoords(FVector Position)
+@@ -427,21 +532,19 @@ FVector2D UEditorAppToolset::WorldPosToScreenCoords(FVector Position)
  {
  	if (!GEditor)
  	{
@@ -24684,7 +24733,7 @@ index 060e67f..b94a387 100644
  		return FVector2D::ZeroVector;
  	}
  	return FVector2D(ScreenCoords.X / Size.X, ScreenCoords.Y / Size.Y);
-@@ -451,34 +528,32 @@ FVector UEditorAppToolset::ScreenCoordsToWorld(FVector2D Coords, float TraceDist
+@@ -451,34 +554,32 @@ FVector UEditorAppToolset::ScreenCoordsToWorld(FVector2D Coords, float TraceDist
  {
  	if (Coords.X < 0 || Coords.X > 1 || Coords.Y < 0 || Coords.Y > 1)
  	{
@@ -24726,7 +24775,7 @@ index 060e67f..b94a387 100644
  		return FVector::ZeroVector;
  	}
  	FHitResult HitResult;
-@@ -495,7 +570,7 @@ FVector UEditorAppToolset::ScreenCoordsToWorld(FVector2D Coords, float TraceDist
+@@ -495,7 +596,7 @@ FVector UEditorAppToolset::ScreenCoordsToWorld(FVector2D Coords, float TraceDist
  		true);
  	if (!bHit)
  	{
@@ -24735,7 +24784,7 @@ index 060e67f..b94a387 100644
  		return FVector::ZeroVector;
  	}
  	return HitResult.Location;
-@@ -506,7 +581,7 @@ TArray<FString> UEditorAppToolset::GetSelectedAssets()
+@@ -506,7 +607,7 @@ TArray<FString> UEditorAppToolset::GetSelectedAssets()
  	FContentBrowserModule& ContentBrowserModule =
  		FModuleManager::LoadModuleChecked<FContentBrowserModule>("ContentBrowser");
  	TArray<FAssetData> AssetData;
@@ -24744,7 +24793,7 @@ index 060e67f..b94a387 100644
  	TArray<FString> Result;
  	for (const FAssetData& Data : AssetData)
  	{
-@@ -542,7 +617,7 @@ UToolCallAsyncResultVoid* UEditorAppToolset::SelectAssets(const TArray<FString>&
+@@ -542,7 +643,7 @@ UToolCallAsyncResultVoid* UEditorAppToolset::SelectAssets(const TArray<FString>&
  			FContentBrowserModule& CBModule =
  				FModuleManager::LoadModuleChecked<FContentBrowserModule>("ContentBrowser");
  			TArray<FAssetData> SelectedAssets;
@@ -24753,7 +24802,7 @@ index 060e67f..b94a387 100644
  			TSet<FName> SelectedPackages;
  			for (const FAssetData& Data : SelectedAssets)
  			{
-@@ -592,7 +667,7 @@ void UEditorAppToolset::SetContentBrowserPath(const FString& Path)
+@@ -592,7 +693,7 @@ void UEditorAppToolset::SetContentBrowserPath(const FString& Path)
  	const FString ResultPath = UEditorAppToolset::GetContentBrowserPath();
  	if (ResultPath != Path)
  	{
@@ -24762,7 +24811,7 @@ index 060e67f..b94a387 100644
  			TEXT("Failed to navigate content browser to '%s': ended up at '%s'."),
  			*Path, *ResultPath));
  	}
-@@ -602,13 +677,13 @@ void UEditorAppToolset::OpenEditorForAsset(const FString& AssetPath)
+@@ -602,13 +703,13 @@ void UEditorAppToolset::OpenEditorForAsset(const FString& AssetPath)
  {
  	if (!GEditor)
  	{
@@ -24778,7 +24827,7 @@ index 060e67f..b94a387 100644
  			FString::Printf(TEXT("%s is not a valid asset path."), *AssetPath));
  		return;
  	}
-@@ -616,7 +691,7 @@ void UEditorAppToolset::OpenEditorForAsset(const FString& AssetPath)
+@@ -616,7 +717,7 @@ void UEditorAppToolset::OpenEditorForAsset(const FString& AssetPath)
  	check(Subsystem);
  	if (!Subsystem->OpenEditorForAsset(Asset))
  	{
@@ -24787,7 +24836,7 @@ index 060e67f..b94a387 100644
  			FString::Printf(TEXT("Failed to open editor for asset: %s"), *AssetPath));
  	}
  }
-@@ -626,7 +701,7 @@ TArray<FString> UEditorAppToolset::GetOpenAssets()
+@@ -626,7 +727,7 @@ TArray<FString> UEditorAppToolset::GetOpenAssets()
  	TArray<FString> Result;
  	if (!GEditor)
  	{
@@ -24796,7 +24845,7 @@ index 060e67f..b94a387 100644
  		return Result;
  	}
  	UAssetEditorSubsystem* Subsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
-@@ -679,7 +754,7 @@ FToolsetImage UEditorAppToolset::CaptureEditorImage()
+@@ -679,7 +780,7 @@ FToolsetImage UEditorAppToolset::CaptureEditorImage()
  
  	if (Captured.IsEmpty())
  	{
@@ -24805,7 +24854,7 @@ index 060e67f..b94a387 100644
  		return FToolsetImage{};
  	}
  
-@@ -735,7 +810,7 @@ FToolsetImage UEditorAppToolset::CaptureEditorImage()
+@@ -735,7 +836,7 @@ FToolsetImage UEditorAppToolset::CaptureEditorImage()
  	const TArray<FColor>& Final = ScaledPixels.Num() > 0 ? ScaledPixels : Canvas;
  	if (!Image.SetFromBitmap(Final, Dimensions))
  	{
@@ -24814,7 +24863,7 @@ index 060e67f..b94a387 100644
  		return FToolsetImage{};
  	}
  	return Image;
-@@ -993,7 +1068,7 @@ namespace
+@@ -993,7 +1094,7 @@ namespace
  
  	/**
  	 * Build the view-projection matrix for the given viewport client using the
@@ -24823,7 +24872,7 @@ index 060e67f..b94a387 100644
  	 * match exactly what the user sees on screen.
  	 *
  	 * Returns an empty optional if no scene is available (typically headless / no
-@@ -1016,7 +1091,7 @@ namespace
+@@ -1016,7 +1117,7 @@ namespace
  			return {};
  		}
  		// Copy out while SceneView and ViewFamily are still alive.
@@ -24832,7 +24881,7 @@ index 060e67f..b94a387 100644
  	}
  
  	/**
-@@ -1089,7 +1164,7 @@ FViewportCapture UEditorAppToolset::CaptureViewport(
+@@ -1089,7 +1190,7 @@ FViewportCapture UEditorAppToolset::CaptureViewport(
  	FEditorViewportClient* ViewportClient = GCurrentLevelEditingViewportClient;
  	if (!ViewportClient || !ViewportClient->Viewport)
  	{
@@ -24841,7 +24890,7 @@ index 060e67f..b94a387 100644
  		return Out;
  	}
  
-@@ -1097,7 +1172,7 @@ FViewportCapture UEditorAppToolset::CaptureViewport(
+@@ -1097,7 +1198,7 @@ FViewportCapture UEditorAppToolset::CaptureViewport(
  	const FIntPoint Size = Viewport->GetSizeXY();
  	if (Size.X <= 0 || Size.Y <= 0)
  	{
@@ -24850,7 +24899,7 @@ index 060e67f..b94a387 100644
  		return Out;
  	}
  
-@@ -1151,7 +1226,7 @@ FViewportCapture UEditorAppToolset::CaptureViewport(
+@@ -1151,7 +1252,7 @@ FViewportCapture UEditorAppToolset::CaptureViewport(
  	TArray<FColor> Bitmap;
  	if (!GetViewportScreenShot(Viewport, Bitmap))
  	{
@@ -24859,7 +24908,7 @@ index 060e67f..b94a387 100644
  		return Out;
  	}
  
-@@ -1172,7 +1247,7 @@ FViewportCapture UEditorAppToolset::CaptureViewport(
+@@ -1172,7 +1273,7 @@ FViewportCapture UEditorAppToolset::CaptureViewport(
  	{
  		if (!Out.Image.SetFromBitmap(Bitmap, Size))
  		{
@@ -24868,7 +24917,7 @@ index 060e67f..b94a387 100644
  		}
  		return Out;
  	}
-@@ -1192,7 +1267,7 @@ FViewportCapture UEditorAppToolset::CaptureViewport(
+@@ -1192,7 +1293,7 @@ FViewportCapture UEditorAppToolset::CaptureViewport(
  	const TOptional<FMatrix> ViewProjOpt = GetAnnotationViewProjectionMatrix(ViewportClient);
  	if (!ViewProjOpt.IsSet())
  	{
@@ -24877,7 +24926,7 @@ index 060e67f..b94a387 100644
  		return Out;
  	}
  	const FMatrix& ViewProj = ViewProjOpt.GetValue();
-@@ -1348,7 +1423,7 @@ FViewportCapture UEditorAppToolset::CaptureViewport(
+@@ -1348,7 +1449,7 @@ FViewportCapture UEditorAppToolset::CaptureViewport(
  	// --- 5. Encode result -------------------------------------------------------------------
  	if (!Out.Image.SetFromBitmap(Bitmap, Size))
  	{
@@ -24887,10 +24936,25 @@ index 060e67f..b94a387 100644
  	}
  
 diff --git a/Plugins/EditorToolset/Source/EditorToolset/Private/EditorAppToolset.h b/Plugins/EditorToolset/Source/EditorToolset/Private/EditorAppToolset.h
-index c3b8d10..fbc880b 100644
+index c3b8d10..3f4faeb 100644
 --- a/Plugins/EditorToolset/Source/EditorToolset/Private/EditorAppToolset.h
 +++ b/Plugins/EditorToolset/Source/EditorToolset/Private/EditorAppToolset.h
-@@ -224,7 +224,7 @@ public:
+@@ -206,6 +206,14 @@ public:
+ 	UFUNCTION(meta = (AICallable))
+ 	static FString SearchCVars(const FString& Name);
+ 
++	/*
++	 * Executes an editor console command.
++	 * @param Command The console command to run, e.g. "viewmode unlit".
++	 * @return True if the editor handled the command, false otherwise.
++	 */
++	UFUNCTION(meta = (AICallable))
++	static bool ExecuteConsoleCommand(const FString& Command);
++
+ 	/*
+ 	 * Renders a thumbnail for the specified asset (e.g. static meshes, skeletal meshes,
+ 	 * skeletons, animations, montages, materials, textures).
+@@ -224,7 +232,7 @@ public:
  
  	/*
  	 * Captures the level viewport with optional annotations.
@@ -26252,10 +26316,40 @@ index 0000000..13c0664
 +	static void RaiseError(const FString& Message);
 +};
 diff --git a/Plugins/EditorToolset/Source/EditorToolset/Private/Tests/EditorAppToolsetTest.cpp b/Plugins/EditorToolset/Source/EditorToolset/Private/Tests/EditorAppToolsetTest.cpp
-index cdb0985..86e77b9 100644
+index cdb0985..d463df9 100644
 --- a/Plugins/EditorToolset/Source/EditorToolset/Private/Tests/EditorAppToolsetTest.cpp
 +++ b/Plugins/EditorToolset/Source/EditorToolset/Private/Tests/EditorAppToolsetTest.cpp
-@@ -613,7 +613,7 @@ void FEditorAppToolsetSpec::Define()
+@@ -14,6 +14,7 @@
+ #include "GameFramework/Actor.h"
+ #include "GameFramework/Pawn.h"
+ #include "GameFramework/PlayerController.h"
++#include "HAL/IConsoleManager.h"
+ #include "Misc/App.h"
+ #include "Misc/CoreMiscDefines.h"
+ #include "Subsystems/UnrealEditorSubsystem.h"
+@@ -167,6 +168,21 @@ void FEditorAppToolsetSpec::Define()
+ 		TestEqual("CVar", CVarJsonData->Values.Num(), 0);
+ 	});
+ 
++	It(TEXT("Can execute a console command"), [this]()
++	{
++		bool bCommandRan = false;
++		FAutoConsoleCommand Command(
++			TEXT("toolset.test.ExecuteConsoleCommand"),
++			TEXT("Test command for EditorAppToolset."),
++			FConsoleCommandDelegate::CreateLambda([&bCommandRan]()
++			{
++				bCommandRan = true;
++			}));
++
++		TestTrue("Command handled", UEditorAppToolset::ExecuteConsoleCommand(TEXT("toolset.test.ExecuteConsoleCommand")));
++		TestTrue("Command ran", bCommandRan);
++	});
++
+ 	// CaptureAssetImage tests
+ 
+ 	It(TEXT("CaptureAssetImage returns an error for a non-existent asset"), [this]()
+@@ -613,7 +629,7 @@ void FEditorAppToolsetSpec::Define()
  						Pawn = PC->GetPawn();
  					}
  				}
