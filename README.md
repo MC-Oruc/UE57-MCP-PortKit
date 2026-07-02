@@ -16,6 +16,14 @@ This PortKit also carries two project-specific usability extensions on top of th
 
 These extensions are intentional project additions. They are not counted as UE 5.8 parity sub-tools.
 
+## Agent Tool Guidance
+
+For AI agents using the ported tool surface, start with
+[MCPToolGuidance.md](MCPToolGuidance.md). It provides the
+recommended tool-selection rules, common workflows, risky-tool guardrails, and
+an exact registered-toolset appendix so agents do not waste tokens discovering
+unrelated tools.
+
 ---
 
 ## Technical Overview & Installation Flow
