@@ -40934,7 +40934,7 @@ index d57fd4d..10ab589 100644
  	return AsyncResult;
  }
 diff --git a/Plugins/PCGToolset/Source/PCGToolset/Private/PCGToolset.cpp b/Plugins/PCGToolset/Source/PCGToolset/Private/PCGToolset.cpp
-index c4551e6..3869f2e 100644
+index c4551e6..062f923 100644
 --- a/Plugins/PCGToolset/Source/PCGToolset/Private/PCGToolset.cpp
 +++ b/Plugins/PCGToolset/Source/PCGToolset/Private/PCGToolset.cpp
 @@ -1,4 +1,4 @@
@@ -40954,23 +40954,47 @@ index c4551e6..3869f2e 100644
  #include "Elements/PCGFilterByType.h"
  #include "Helpers/PCGHelpers.h"
  #include "Helpers/PCGSubgraphHelpers.h"
-@@ -29,12 +27,28 @@
+@@ -29,12 +27,52 @@
  #include "AssetRegistry/AssetRegistryModule.h"
  #include "Builders/CubeBuilder.h"
  #include "Components/BrushComponent.h"
 -#include "Kismet/KismetSystemLibrary.h"
 +#include "Components/SplineComponent.h"
++#include "EdGraph/EdGraph.h"
 +#include "GameFramework/Actor.h"
  #include "Misc/PackageName.h"
++#include "Nodes/PCGEditorGraphNodeBase.h"
 +#include "Subsystems/EditorActorSubsystem.h"
  #include "ToolsetRegistry/ToolsetLibrary.h"
 +#include "UObject/Stack.h"
++#include "UObject/UObjectIterator.h"
  
  namespace PCGToolset
  {
 +	EPCGChangeType GetEditorChangeType()
 +	{
 +		return EPCGChangeType::Structural;
++	}
++
++	void SyncOpenEditorNodePosition(UPCGNode* Node, const int32 XPositionIdx, const int32 YPositionIdx)
++	{
++		for (TObjectIterator<UPCGEditorGraphNodeBase> It; It; ++It)
++		{
++			UPCGEditorGraphNodeBase* EditorNode = *It;
++			if (!IsValid(EditorNode) || EditorNode->GetPCGNode() != Node)
++			{
++				continue;
++			}
++
++			EditorNode->Modify();
++			EditorNode->NodePosX = XPositionIdx;
++			EditorNode->NodePosY = YPositionIdx;
++
++			if (UEdGraph* EditorGraph = EditorNode->GetGraph())
++			{
++				EditorGraph->NotifyGraphChanged();
++			}
++		}
 +	}
 +
 +	struct FScriptErrorBridge
@@ -40984,7 +41008,7 @@ index c4551e6..3869f2e 100644
  	FIntRect GetNodesBoundBox(const TArray<UPCGNode*>& Nodes)
  	{
  		const FIntPoint NodeSafeSize(200, 100);
-@@ -93,8 +107,245 @@ namespace PCGToolset
+@@ -93,8 +131,245 @@ namespace PCGToolset
  
  		return {};
  	}
@@ -41230,7 +41254,7 @@ index c4551e6..3869f2e 100644
  // Graph -----------------------------------------------------------------------------------------------------------
  UPCGGraph* UPCGToolset::CreateGraph(const FString& Name, const FString& Path)
  {
-@@ -376,6 +627,100 @@ FPCGGraphInstanceInfo UPCGToolset::SpawnGraphInstance(UPCGGraph* Graph, const FS
+@@ -376,6 +651,100 @@ FPCGGraphInstanceInfo UPCGToolset::SpawnGraphInstance(UPCGGraph* Graph, const FS
  	return GraphInstanceInfo;
  }
  
@@ -41331,7 +41355,7 @@ index c4551e6..3869f2e 100644
  // Graph Instance Param --------------------------------------------------------------------------------------------
  FInstancedPropertyBag UPCGToolset::GetGraphInstanceParams(const APCGVolume* PCGVolume)
  {
-@@ -536,9 +881,6 @@ UPCGNode* UPCGToolset::AddNode(
+@@ -536,9 +905,6 @@ UPCGNode* UPCGToolset::AddNode(
  	const int32 XPositionIdx,
  	const int32 YPositionIdx)
  {
@@ -41341,7 +41365,7 @@ index c4551e6..3869f2e 100644
  	using namespace PCGToolsetLibrary;
  	if (!Graph)
  	{
-@@ -563,7 +905,6 @@ UPCGNode* UPCGToolset::AddNode(
+@@ -563,7 +929,6 @@ UPCGNode* UPCGToolset::AddNode(
  	if (!CreatedNode)
  	{
  		Transaction.Cancel();
@@ -41349,7 +41373,7 @@ index c4551e6..3869f2e 100644
  		FString ErrorMessage = FString::Format(TEXT("Unable to create node with type '{0}'."), {NativeNodeType});
  		UKismetSystemLibrary::RaiseScriptError(ErrorMessage);
  		return nullptr;
-@@ -571,7 +912,6 @@ UPCGNode* UPCGToolset::AddNode(
+@@ -571,7 +936,6 @@ UPCGNode* UPCGToolset::AddNode(
  
  	auto OnErrorCleanup = [&]()
  	{
@@ -41357,7 +41381,7 @@ index c4551e6..3869f2e 100644
  		Transaction.Cancel();
  		Graph->RemoveNode(CreatedNode);
  	};
-@@ -601,7 +941,7 @@ UPCGNode* UPCGToolset::AddNode(
+@@ -601,7 +965,7 @@ UPCGNode* UPCGToolset::AddNode(
  	CreatedNode->SetNodePosition(XPositionIdx, YPositionIdx);
  
  	[[maybe_unused]] bool bDummy = Graph->MarkPackageDirty();
@@ -41366,7 +41390,7 @@ index c4551e6..3869f2e 100644
  
  	return CreatedNode;
  }
-@@ -618,9 +958,6 @@ UPCGNode* UPCGToolset::AddSubgraphNode(
+@@ -618,9 +982,6 @@ UPCGNode* UPCGToolset::AddSubgraphNode(
  {
  	using namespace PCGToolsetLibrary;
  
@@ -41376,7 +41400,7 @@ index c4551e6..3869f2e 100644
  	if (!Graph)
  	{
  		UKismetSystemLibrary::RaiseScriptError("Error: Graph not found");
-@@ -640,7 +977,6 @@ UPCGNode* UPCGToolset::AddSubgraphNode(
+@@ -640,7 +1001,6 @@ UPCGNode* UPCGToolset::AddSubgraphNode(
  	UPCGNode* CreatedNode = Graph->AddNodeOfType(SubgraphSettings);
  	if (!CreatedNode)
  	{
@@ -41384,7 +41408,7 @@ index c4551e6..3869f2e 100644
  		Transaction.Cancel();
  		UKismetSystemLibrary::RaiseScriptError(TEXT("Unable to create subgraph node."));
  		return nullptr;
-@@ -648,7 +984,6 @@ UPCGNode* UPCGToolset::AddSubgraphNode(
+@@ -648,7 +1008,6 @@ UPCGNode* UPCGToolset::AddSubgraphNode(
  
  	auto OnErrorCleanup = [&]()
  	{
@@ -41392,7 +41416,7 @@ index c4551e6..3869f2e 100644
  		Transaction.Cancel();
  		Graph->RemoveNode(CreatedNode);
  	};
-@@ -689,7 +1024,7 @@ UPCGNode* UPCGToolset::AddSubgraphNode(
+@@ -689,7 +1048,7 @@ UPCGNode* UPCGToolset::AddSubgraphNode(
  	CreatedNode->SetNodePosition(XPositionIdx, YPositionIdx);
  
  	[[maybe_unused]] bool bDummy = Graph->MarkPackageDirty();
@@ -41401,7 +41425,7 @@ index c4551e6..3869f2e 100644
  
  	return CreatedNode;
  }
-@@ -698,9 +1033,6 @@ bool UPCGToolset::UpdateNode(UPCGNode* Node, const FString& JsonParams, const FS
+@@ -698,9 +1057,6 @@ bool UPCGToolset::UpdateNode(UPCGNode* Node, const FString& JsonParams, const FS
  {
  	using namespace PCGToolsetLibrary;
  
@@ -41411,7 +41435,7 @@ index c4551e6..3869f2e 100644
  	if (!Node)
  	{
  		UKismetSystemLibrary::RaiseScriptError("Error: Node not found");
-@@ -730,7 +1062,6 @@ bool UPCGToolset::UpdateNode(UPCGNode* Node, const FString& JsonParams, const FS
+@@ -730,7 +1086,6 @@ bool UPCGToolset::UpdateNode(UPCGNode* Node, const FString& JsonParams, const FS
  			if (!ensure(SubgraphInterface && SubgraphInterface->IsInstance()))
  			{
  				Transaction.Cancel();
@@ -41419,7 +41443,7 @@ index c4551e6..3869f2e 100644
  				UKismetSystemLibrary::RaiseScriptError(FString::Format(TEXT("Subgraph must be instantiated: {0}"), {Node->GetName()}));
  				return false;
  			}
-@@ -741,7 +1072,6 @@ bool UPCGToolset::UpdateNode(UPCGNode* Node, const FString& JsonParams, const FS
+@@ -741,7 +1096,6 @@ bool UPCGToolset::UpdateNode(UPCGNode* Node, const FString& JsonParams, const FS
  			// @todo_pcg: params not being set properly should return success: true but with warnings
  			if (!Graph::SetGraphInstanceParams(SubgraphInstance, JsonParams))
  			{
@@ -41427,7 +41451,7 @@ index c4551e6..3869f2e 100644
  				Transaction.Cancel();
  				UKismetSystemLibrary::RaiseScriptError(FString::Format(TEXT("Could not set params on node '{0}'."), {Node->GetName()}));
  				return false;
-@@ -749,7 +1079,6 @@ bool UPCGToolset::UpdateNode(UPCGNode* Node, const FString& JsonParams, const FS
+@@ -749,7 +1103,6 @@ bool UPCGToolset::UpdateNode(UPCGNode* Node, const FString& JsonParams, const FS
  		}
  		else if (!UToolsetLibrary::SetObjectProperties(Node->GetSettings(), JsonParams, EBypassContainerCheck::Yes))
  		{
@@ -41435,7 +41459,7 @@ index c4551e6..3869f2e 100644
  			Transaction.Cancel();
  			UKismetSystemLibrary::RaiseScriptError(FString::Format(TEXT("Could not set params on node '{0}'."), {Node->GetName()}));
  			return false;
-@@ -759,7 +1088,7 @@ bool UPCGToolset::UpdateNode(UPCGNode* Node, const FString& JsonParams, const FS
+@@ -759,7 +1112,7 @@ bool UPCGToolset::UpdateNode(UPCGNode* Node, const FString& JsonParams, const FS
  	if (UPCGGraph* Graph = Node->GetGraph())
  	{
  		[[maybe_unused]] bool bDummy = Graph->MarkPackageDirty();
@@ -41444,7 +41468,7 @@ index c4551e6..3869f2e 100644
  	}
  	return bSuccess;
  }
-@@ -788,7 +1117,7 @@ bool UPCGToolset::SetNodeComment(UPCGNode* Node, const FString& NodeComment)
+@@ -788,7 +1141,7 @@ bool UPCGToolset::SetNodeComment(UPCGNode* Node, const FString& NodeComment)
  	if (UPCGGraph* Graph = Node->GetGraph())
  	{
  		[[maybe_unused]] bool bDummy = Graph->MarkPackageDirty();
@@ -41453,7 +41477,28 @@ index c4551e6..3869f2e 100644
  	}
  
  	return true;
-@@ -841,7 +1170,7 @@ bool UPCGToolset::RemoveNode(UPCGGraph* Graph, UPCGNode* Node)
+@@ -814,7 +1167,20 @@ bool UPCGToolset::RepositionNode(UPCGNode* Node, const int32 XPositionIdx, const
+ 		return false;
+ 	}
+ 
++	UPCGGraph* Graph = Node->GetGraph();
++	if (!Graph)
++	{
++		UKismetSystemLibrary::RaiseScriptError("Error: Node has no Graph");
++		return false;
++	}
++
++	FScopedTransaction Transaction(INVTEXT("RepositionNodeToolCall"));
++	Graph->Modify();
++	Node->Modify();
+ 	Node->SetNodePosition(XPositionIdx, YPositionIdx);
++	PCGToolset::SyncOpenEditorNodePosition(Node, XPositionIdx, YPositionIdx);
++	[[maybe_unused]] const bool bMarkedDirty = Graph->MarkPackageDirty();
++	Graph->ForceNotificationForEditor(PCGToolset::GetEditorChangeType());
+ 	return true;
+ }
+ 
+@@ -841,7 +1207,7 @@ bool UPCGToolset::RemoveNode(UPCGGraph* Graph, UPCGNode* Node)
  
  	FScopedTransaction Transaction(INVTEXT("RemoveGraphNodeToolCall"));
  	Graph->RemoveNode(Node);
@@ -41462,7 +41507,7 @@ index c4551e6..3869f2e 100644
  	return true;
  }
  
-@@ -949,7 +1278,7 @@ TArray<UPCGNode*> UPCGToolset::ConnectNodePins(UPCGNode* FromNode, const FString
+@@ -949,7 +1315,7 @@ TArray<UPCGNode*> UPCGToolset::ConnectNodePins(UPCGNode* FromNode, const FString
  			return {};
  	}
  
@@ -41471,7 +41516,7 @@ index c4551e6..3869f2e 100644
  	return AddedNodes;
  }
  
-@@ -1102,42 +1431,43 @@ FString UPCGToolset::GetNodeDataView(
+@@ -1102,42 +1468,43 @@ FString UPCGToolset::GetNodeDataView(
  
  	using FNodeExecData = FPCGGraphExecutionInspection::FNodeExecutedNotificationData;
  
@@ -41524,7 +41569,7 @@ index c4551e6..3869f2e 100644
  	if (DataCollection.TaggedData.IsEmpty())
  	{
  		FString ErrorMessage = FString::Printf(TEXT("Node '%s' was executed but produced no data on pin '%s'."), *Node->GetFName().ToString(), *PinLabel);
-@@ -1145,95 +1475,16 @@ FString UPCGToolset::GetNodeDataView(
+@@ -1145,95 +1512,16 @@ FString UPCGToolset::GetNodeDataView(
  		return {};
  	}
  
@@ -41549,7 +41594,9 @@ index c4551e6..3869f2e 100644
 -
 -		FPCGDataView DataView;
 -		if (const UPCGDataViewData* DataViewData = Cast<UPCGDataViewData>(Data))
--		{
++		TSharedPtr<FJsonObject> SerializedItem = PCGToolset::TaggedDataToJson(TaggedData, AttributeName, StartIndex, EndIndex);
++		if (!SerializedItem)
+ 		{
 -			DataView = DataViewData->GetDataView();
 -		}
 -		else
@@ -41559,9 +41606,7 @@ index c4551e6..3869f2e 100644
 -
 -		// Configure selection based on AttributeName
 -		if (AttributeName.IsEmpty())
-+		TSharedPtr<FJsonObject> SerializedItem = PCGToolset::TaggedDataToJson(TaggedData, AttributeName, StartIndex, EndIndex);
-+		if (!SerializedItem)
- 		{
+-		{
 -			DataView.Selection.bAllAttributes = true;
 -		}
 -		else // Set the attribute explicitly
@@ -41624,7 +41669,7 @@ index c4551e6..3869f2e 100644
  	}
  
  	if (SerializedItems.IsEmpty())
-@@ -1246,10 +1497,10 @@ FString UPCGToolset::GetNodeDataView(
+@@ -1246,10 +1534,10 @@ FString UPCGToolset::GetNodeDataView(
  	// Return single or by array
  	if (SerializedItems.Num() == 1)
  	{
@@ -41637,7 +41682,7 @@ index c4551e6..3869f2e 100644
  }
  
  // Comment Boxes ---------------------------------------------------------------------------------------------------
-@@ -1289,7 +1540,7 @@ FString UPCGToolset::AddCommentBox(UPCGGraph* Graph, const TArray<UPCGNode*>& No
+@@ -1289,7 +1577,7 @@ FString UPCGToolset::AddCommentBox(UPCGGraph* Graph, const TArray<UPCGNode*>& No
  		CommentBox.Min.Y,
  		CommentBox.Width(),
  		CommentBox.Height(),
@@ -41646,7 +41691,7 @@ index c4551e6..3869f2e 100644
  		Color);
  	CommentAdded.GUID = FGuid::NewGuid();
  
-@@ -1297,7 +1548,7 @@ FString UPCGToolset::AddCommentBox(UPCGGraph* Graph, const TArray<UPCGNode*>& No
+@@ -1297,7 +1585,7 @@ FString UPCGToolset::AddCommentBox(UPCGGraph* Graph, const TArray<UPCGNode*>& No
  	Graph->Modify();
  	Graph->SetCommentNodes(CommentNodes);
  	[[maybe_unused]] bool bDummy = Graph->MarkPackageDirty();
@@ -41655,7 +41700,7 @@ index c4551e6..3869f2e 100644
  
  	return CommentAdded.GUID.ToString();
  }
-@@ -1357,7 +1608,7 @@ bool UPCGToolset::UpdateCommentBox(UPCGGraph* Graph, const FString& CommentId, c
+@@ -1357,7 +1645,7 @@ bool UPCGToolset::UpdateCommentBox(UPCGGraph* Graph, const FString& CommentId, c
  	Graph->Modify();
  	Graph->SetCommentNodes(CommentNodes);
  	[[maybe_unused]] bool bDummy = Graph->MarkPackageDirty();
@@ -41664,7 +41709,7 @@ index c4551e6..3869f2e 100644
  	return true;
  }
  
-@@ -1385,6 +1636,6 @@ bool UPCGToolset::RemoveCommentBox(UPCGGraph* Graph, const FString& CommentId)
+@@ -1385,6 +1673,6 @@ bool UPCGToolset::RemoveCommentBox(UPCGGraph* Graph, const FString& CommentId)
  	Graph->Modify();
  	Graph->SetCommentNodes(CommentNodes);
  	[[maybe_unused]] bool bDummy = Graph->MarkPackageDirty();
