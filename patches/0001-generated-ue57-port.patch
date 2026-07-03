@@ -41773,7 +41773,7 @@ index a5d328d..5756168 100644
  }
 +#endif
 diff --git a/Plugins/PCGToolset/Source/PCGToolset/Private/PCGToolsetLibraryCore.cpp b/Plugins/PCGToolset/Source/PCGToolset/Private/PCGToolsetLibraryCore.cpp
-index 88a8fb6..d4f207f 100644
+index 88a8fb6..b6794de 100644
 --- a/Plugins/PCGToolset/Source/PCGToolset/Private/PCGToolsetLibraryCore.cpp
 +++ b/Plugins/PCGToolset/Source/PCGToolset/Private/PCGToolsetLibraryCore.cpp
 @@ -1,4 +1,4 @@
@@ -41815,7 +41815,24 @@ index 88a8fb6..d4f207f 100644
  
  // Json helpers
  TSharedPtr<FJsonObject> PCGToolsetLibrary::Json::ParseJson(const FString& JsonString)
-@@ -437,18 +451,37 @@ TArray<FPCGEdgeInfo> PCGToolsetLibrary::Graph::GetGraphEdges(const UPCGGraph* Gr
+@@ -387,6 +401,7 @@ const TMap<FName, UPCGSettings*>& PCGToolsetLibrary::Graph::GetNodeNameToSetting
+ 		GetDerivedClasses(UPCGSettings::StaticClass(), PCGSettingsClasses, true);
+ 		TMap<FName, TSubclassOf<UPCGSettings>> SettingsMap;
+ 		UPackage* PCGPackage = FindPackage(nullptr, TEXT("/Script/PCG"));
++		UPackage* SoCPackage = FindPackage(nullptr, TEXT("/Script/SoC"));
+ 
+ 		for (UClass* PCGSettingClass : PCGSettingsClasses)
+ 		{
+@@ -395,7 +410,7 @@ const TMap<FName, UPCGSettings*>& PCGToolsetLibrary::Graph::GetNodeNameToSetting
+ 				continue;
+ 			}
+ 
+-			if (!PCGSettingClass->IsInPackage(PCGPackage))
++			if (!PCGSettingClass->IsInPackage(PCGPackage) && !PCGSettingClass->IsInPackage(SoCPackage))
+ 			{
+ 				continue;
+ 			}
+@@ -437,18 +452,37 @@ TArray<FPCGEdgeInfo> PCGToolsetLibrary::Graph::GetGraphEdges(const UPCGGraph* Gr
  		return {};
  	}
  
