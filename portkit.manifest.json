@@ -178,6 +178,12 @@
 			"source": "BlueprintEditorBridge",
 			"target": "BlueprintEditorBridge",
 			"enable": true
+		},
+		{
+			"name": "MaterialGraphDSLBridge",
+			"source": "MaterialGraphDSLBridge",
+			"target": "MaterialGraphDSLBridge",
+			"enable": true
 		}
 	],
 	"disabled_plugins": [
@@ -220,6 +226,7 @@
 		"EditorToolset.BlueprintTools": 53,
 		"EditorToolset.MaterialInstanceTools": 13,
 		"EditorToolset.MaterialTools": 22,
+		"editor_toolset.toolsets.material.MaterialTools": 18,
 		"PCGToolset.PCGToolset": 30,
 		"PCGToolset.PCGSpatialToolset": 1
 	}

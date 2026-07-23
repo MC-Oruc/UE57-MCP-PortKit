@@ -1,0 +1,27 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "Material Graph DSL Bridge",
+	"Description": "Project-owned native bridge and Python parser for atomic MCP material graph operations.",
+	"Category": "Editor",
+	"EditorOnly": true,
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Plugins": [
+		{
+			"Name": "ToolsetRegistry",
+			"Enabled": true
+		}
+	],
+	"Modules": [
+		{
+			"Name": "MaterialGraphDSLBridge",
+			"Type": "Editor",
+			"LoadingPhase": "PreDefault",
+			"TargetAllowList": [ "Editor" ]
+		}
+	]
+}

@@ -75,7 +75,7 @@ a checklist.
 | Editor camera, screenshots, selection, PIE, console commands | `EditorToolset.EditorAppToolset` | Editor session state |
 | Read logs or change log verbosity | `EditorToolset.LogsToolset` | Output Log access |
 | Create or edit Blueprints and graphs | `EditorToolset.BlueprintTools` | Blueprint variables, nodes, graphs, compile |
-| Create/edit materials or material functions | `EditorToolset.MaterialTools` | Material graph expressions |
+| Read or edit material/material-function graphs | `editor_toolset.toolsets.material.MaterialTools` | Atomic graph DSL, compile diagnostics, rollback |
 | Create/edit material instances | `EditorToolset.MaterialInstanceTools` | Instance parameters and parent |
 | Static mesh import, materials, LODs, collision, Nanite | `editor_toolset.toolsets.static_mesh.StaticMeshTools` | Static mesh asset operations |
 | Skeletal mesh import, sockets, bones, physics asset assignment | `editor_toolset.toolsets.skeletal_mesh.SkeletalMeshTools` | Skeletal mesh asset operations |
@@ -452,178 +452,58 @@ If no filter is provided, plan only or use `ListTests` with a narrow name filter
 
 Use after a failed tool call, failed test, or runtime warning.
 
-## Level Design Tool Reference
+### R13: Material Graph DSL
 
-Use these toolsets directly for level design, layout, dressing, visual
-verification, and scene cleanup. These are fully listed because they are the
-highest-risk, highest-frequency editor manipulation tools.
+Use the Python-backed toolset below. Do not confuse it with the older
+`EditorToolset.MaterialTools` native toolset.
 
-### `editor_toolset.toolsets.scene.SceneTools`
+Read the complete graph in one call:
 
-World/level actor operations:
+```json
+{
+  "toolset_name": "editor_toolset.toolsets.material.MaterialTools",
+  "tool_name": "read_graph_dsl",
+  "arguments": {
+    "material_or_function": {"refPath": "<material-or-function-ref>"}
+  }
+}
+```
 
-- `get_current_level`
-- `load_level`
-- `find_actors`
-- `add_to_scene_from_asset`
-- `add_to_scene_from_class`
-- `remove_from_scene`
-- `get_collision_channels`
-- `get_folders`
-- `get_actors_in_folder`
-- `set_actor_folder`
-- `rename_folder`
-- `delete_folder`
-- `trace_world`
-- `merge_actors`
-- `create_level_instance`
-- `edit_level_instance`
-- `commit_level_instance`
-- `can_edit`
-- `is_checked_out`
-- `save_actor`
+Apply a complete `replace` document or a narrow `patch` document:
 
-Use `get_current_level` before scene writes. Use `load_level` only when the user
-explicitly named the target level.
+```json
+{
+  "toolset_name": "editor_toolset.toolsets.material.MaterialTools",
+  "tool_name": "apply_graph_dsl",
+  "arguments": {
+    "material_or_function": {"refPath": "<material-or-function-ref>"},
+    "code": "<version-3-DSL-JSON>"
+  }
+}
+```
 
-### `editor_toolset.toolsets.actor.ActorTools`
+`apply_graph_dsl` already performs transient sandbox validation, shader
+compilation and backup restoration. Do not call `validate_graph_dsl` first
+unless the user requested a dry run. Read `returnValue` as JSON and require
+`success == true`; on failure inspect `errors` and `compile_errors` before
+changing the graph again. Save the asset explicitly after success.
 
-Actor/component structure and transforms:
+`validate_graph_dsl` takes the same arguments as `apply_graph_dsl` and never
+changes the target. `get_graph_dsl_docs` takes `{}`. Use the docs call only when
+the v3 syntax is not already known. Prefer `patch` for existing graphs and
+stable node GUIDs as patch targets. Use `replace` only for intentional complete
+rebuilds.
 
-- `get_label`
-- `set_label`
-- `get_tags`
-- `has_tag`
-- `add_tag`
-- `remove_tag`
-- `get_actor_transform`
-- `set_actor_transform`
-- `look_at`
-- `get_root_component`
-- `get_component_actor`
-- `get_parent_component`
-- `set_parent_component`
-- `get_actor_bounds`
-- `get_components`
-- `add_component`
-- `remove_component`
+## Compact Domain Notes
 
-Use this for labels, transforms, hierarchy, tags, component enumeration, and
-component add/remove. Use `ObjectTools` after `get_components` when editing
-reflected component properties.
-
-### `editor_toolset.toolsets.primitive.PrimitiveTools`
-
-Greybox primitives:
-
-- `add_cube`
-- `add_sphere`
-- `add_cylinder`
-- `add_cone`
-
-Use these for fast blockout when a real asset is not required.
-
-### `editor_toolset.toolsets.object.ObjectTools`
-
-Generic reflected property access:
-
-- `search_subclasses`
-- `get_class`
-- `list_properties`
-- `get_properties`
-- `set_properties`
-- `reset_properties`
-
-Use this for light intensity/color, component settings, and other reflected
-values when no specialized tool owns the operation. Always `list_properties`
-before `set_properties` unless the property name is already known.
-
-### `EditorToolset.EditorAppToolset`
-
-Editor state, viewport, PIE, screenshots, selection, and console commands:
-
-- `CaptureAssetImage`
-- `CaptureEditorImage`
-- `CaptureViewport`
-- `ExecuteConsoleCommand`
-- `FocusOnActors`
-- `GetCameraTransform`
-- `GetContentBrowserPath`
-- `GetOpenAssets`
-- `GetSelectedActors`
-- `GetSelectedAssets`
-- `GetVisibleActors`
-- `IsPIERunning`
-- `OpenEditorForAsset`
-- `ScreenCoordsToWorld`
-- `SearchCVars`
-- `SelectActors`
-- `SelectAssets`
-- `SetCameraTransform`
-- `SetContentBrowserPath`
-- `StartPIE`
-- `StopPIE`
-- `WorldPosToScreenCoords`
-
-For visual work, use `FocusOnActors` or `SetCameraTransform`, then
-`CaptureViewport` or `CaptureEditorImage`. Use `ExecuteConsoleCommand` only when
-a direct editor command is the shortest correct path.
-
-## PCG Tool Reference
-
-Use PCG tools when the task involves procedural graph authoring, procedural
-placement, graph instances, node wiring, graph parameters, or instant spatial
-queries.
-
-### `PCGToolset.PCGToolset`
-
-- `AddCommentBox`
-- `AddNode`
-- `AddSubgraphNode`
-- `ConnectNodePins`
-- `CreateGraph`
-- `DisconnectNodePins`
-- `DrawSpline`
-- `ExecuteGraphInstance`
-- `GetGraphDescription`
-- `GetGraphInstanceParams`
-- `GetGraphSchema`
-- `GetGraphStructure`
-- `GetNativeNodeSchema`
-- `GetNodeDataView`
-- `GetNodeInfo`
-- `ListAvailableSubgraphs`
-- `ListGraphInstances`
-- `ListNativeNodes`
-- `RemoveCommentBox`
-- `RemoveGraphParams`
-- `RemoveNode`
-- `RepositionNode`
-- `ResetGraphInstanceParams`
-- `SetGraphDescription`
-- `SetGraphInstanceParams`
-- `SetGraphParams`
-- `SetNodeComment`
-- `SpawnGraphInstance`
-- `UpdateCommentBox`
-- `UpdateNode`
-
-PCG workflow:
-
-1. Inspect: `GetGraphSchema`, `GetGraphStructure`, `ListNativeNodes`, or
-   `GetNativeNodeSchema`.
-2. Edit: `AddNode`, `ConnectNodePins`, `SetGraphParams`, `UpdateNode`.
-3. Place/run: `SpawnGraphInstance`, `SetGraphInstanceParams`,
-   `ExecuteGraphInstance`.
-4. Verify: `GetGraphStructure`, `GetGraphInstanceParams`, `GetNodeDataView`,
-   and viewport capture if visual output matters.
-
-### `PCGToolset.PCGSpatialToolset`
-
-- `RunPCGInstantGraph`
-
-Use this for one-off spatial queries where creating or editing a persistent PCG
-graph would be unnecessary.
+- Scene work: `SceneTools` owns world/level actors; confirm the current level
+  before writes. `ActorTools` owns transforms, labels, tags and components.
+- Reflected values: use `ObjectTools`; list properties only when the exact
+  property name is unknown.
+- Visual proof: focus/set the camera, then capture the viewport. Do not capture
+  screenshots for values that can be read back.
+- PCG: inspect schema/structure, make the narrow edit, execute only if runtime
+  output is required, then read structure/data back.
 
 ## Common Workflows
 
@@ -639,9 +519,10 @@ payloads, or `describe_toolset` when no recipe exists.
 - Actor/component properties: select or find the actor, get components if
   needed, `ObjectTools.list_properties`, read the current value, set only the
   target property, read back to verify.
-- Material edits: use `MaterialInstanceTools` for instance parameters and
-  `MaterialTools` only for graph edits. If an instance exposes no parameters,
-  do not guess names.
+- Material edits: use `MaterialInstanceTools` for instance parameters. For a
+  Material or Material Function graph, call `read_graph_dsl` once and use a v3
+  `patch`. `apply_graph_dsl` already validates and compiles; do not add a
+  redundant validation call.
 - Mesh material slots: use `StaticMeshTools` or `SkeletalMeshTools` for asset
   slots. Use `ActorTools.get_components` plus `ObjectTools` for placed actor
   component overrides.
@@ -667,7 +548,8 @@ payloads, or `describe_toolset` when no recipe exists.
 | `AssetTools.delete`, `move`, `duplicate` | User requested asset mutation; check referencers first |
 | `SceneTools.load_level` | User explicitly named a target level |
 | `SceneTools.remove_from_scene`, `delete_folder` | User requested deletion/removal |
-| `BlueprintTools.WriteGraphDsl` | Many graph edits are needed |
+| `BlueprintTools.WriteGraphDsl` | Many Blueprint graph edits are needed |
+| `MaterialTools.apply_graph_dsl` with `mode: replace` | User requested a complete Material graph rebuild |
 | `PluginToolset.SetPluginEnabled` | User requested plugin state change |
 | `GameFeaturesToolset.RequestActivateGameFeature` | User requested feature activation or runtime validation |
 | `EditorAppToolset.ExecuteConsoleCommand` | A direct editor console command is the shortest correct path |
@@ -687,7 +569,7 @@ paths you created and verify with `AssetTools.exists == false`.
 | Actor placed/moved | `SceneTools.find_actors`, `ActorTools.get_actor_transform` |
 | Component added/changed | `ActorTools.get_components`, `ObjectTools.get_properties` |
 | Material instance parameter | Matching `MaterialInstanceTools.Get*Parameter` |
-| Material graph | `MaterialTools.GetExpressions`, `Recompile` |
+| Material graph | `read_graph_dsl`; require `apply_graph_dsl.returnValue.success == true` |
 | Blueprint graph | `ReadGraphDsl`, `CompileBlueprint` |
 | Data table/curve/string | Matching list/get rows/keys/entries |
 | Config | `ConfigSettingsToolset.GetSectionPropertyValues` |
@@ -718,51 +600,3 @@ Use this fallback:
 5. Continue only if the result proves the toolset is relevant.
 
 Do not shotgun-call multiple unrelated toolsets.
-
-## Exact Toolset Appendix
-
-These are the registered toolsets covered by this guide. Use this appendix when
-the MCP server requires an exact `toolset_name`.
-
-| Exact toolset | Route |
-| --- | --- |
-| `ToolsetRegistry.AgentSkillToolset` | Agent skills |
-| `AutomationTestToolset.AutomationTestToolset` | Tests |
-| `EditorToolset.EditorAppToolset` | Editor state, camera, PIE, screenshots, console |
-| `EditorToolset.LogsToolset` | Logs |
-| `EditorToolset.BlueprintTools` | Blueprints |
-| `EditorToolset.CurveTableTools` | Curve tables |
-| `EditorToolset.MaterialInstanceTools` | Material instances |
-| `EditorToolset.MaterialTools` | Materials |
-| `ConfigSettingsToolset.ConfigSettingsToolset` | Config settings |
-| `LiveCodingToolset.LiveCodingToolset` | Live Coding compile |
-| `GameplayTagsToolset.GameplayTagsToolset` | Gameplay tags |
-| `GASToolsets.GameplayCueToolset` | Gameplay cues |
-| `GASToolsets.AttributeSetToolset` | AttributeSet discovery |
-| `GASToolsets.AbilitySystemInspectorToolset` | Runtime ASC inspection |
-| `DataRegistryToolset.DataRegistryTools` | Data registries |
-| `NiagaraToolsets.NiagaraToolset_Info` | Niagara enum/type info |
-| `NiagaraToolsets.NiagaraToolset_Component` | Niagara component assignment |
-| `NiagaraToolsets.NiagaraToolset_Assets` | Niagara script discovery |
-| `NiagaraToolsets.NiagaraToolset_Blueprint` | Niagara Blueprint wrappers |
-| `PCGToolset.PCGToolset` | PCG graphs |
-| `PCGToolset.PCGSpatialToolset` | Instant PCG spatial graph |
-| `PhysicsToolsets.PhysicsAssetToolset` | Physics assets |
-| `GameFeaturesToolset.GameFeaturesToolset` | Game Feature Plugins |
-| `PluginToolset.PluginToolset` | Plugins |
-| `WorldConditionsToolset.WorldConditionTools` | WorldCondition descriptions |
-| `SlateInspectorToolset.SlateInspectorToolset` | Slate UI automation |
-| `state_tree_toolset.toolsets.state_tree.StateTreeTools` | State Trees |
-| `editor_toolset.toolsets.actor.ActorTools` | Actors/components/tags/transforms |
-| `editor_toolset.toolsets.asset.AssetTools` | Assets/folders/packages |
-| `editor_toolset.toolsets.data_asset.DataAssetTools` | Data assets |
-| `editor_toolset.toolsets.data_table.DataTableTools` | Data tables |
-| `editor_toolset.toolsets.object.ObjectTools` | Generic UObject properties |
-| `editor_toolset.toolsets.primitive.PrimitiveTools` | Greybox primitives |
-| `editor_toolset.toolsets.scene.SceneTools` | Level actors/world |
-| `editor_toolset.toolsets.skeletal_mesh.SkeletalMeshTools` | Skeletal mesh assets |
-| `editor_toolset.toolsets.static_mesh.StaticMeshTools` | Static mesh assets |
-| `editor_toolset.toolsets.string_table.StringTableTools` | String tables |
-| `editor_toolset.toolsets.texture.TextureTools` | Textures |
-| `conversation_toolset.toolsets.conversation.ConversationTools` | Conversations |
-| `aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools` | Behavior Trees |

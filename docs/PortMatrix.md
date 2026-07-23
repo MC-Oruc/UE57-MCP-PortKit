@@ -27,6 +27,8 @@ The authoritative tool coverage report is `docs/ValidationReport.md`.
 
 These are intentional project additions on top of the UE 5.8 parity matrix:
 
+- `editor_toolset.toolsets.material.MaterialTools`: 18 project-owned Python
+  tools, including the atomic graph DSL read/validate/apply workflow.
 - `EditorToolset.EditorAppToolset.ExecuteConsoleCommand`: executes editor console commands such as `viewmode unlit`.
 - `editor_toolset.toolsets.asset.AssetTools.find_assets`: enhanced `name` matching. The same `name` argument supports both case-insensitive substring matching and wildcard matching with `*` / `?`.
 
@@ -37,7 +39,8 @@ Current report summary:
 - UE 5.8 total sub-tools: 853
 - Current UE 5.7 ported sub-tools: 414
 - Missing sub-tools: 439
-- Registered toolsets: 40
+- Registered parity toolsets: 40
+- Registered runtime toolsets including Material DSL: 41
 
 `install` enables supported manifest plugins in the target `.uproject` and
 disables manifest-declared unsupported plugins.
@@ -52,7 +55,7 @@ the current patch/import flow:
 
 | Group | Coverage |
 | :--- | :--- |
-| `EditorToolset` | 251/251 + project extensions |
+| `EditorToolset` | 251/251 + project extensions, including the 18-tool Material DSL surface |
 | `PCGToolset` | 31/31 |
 | `AIModuleToolset` | 7/7 |
 | `AutomationTestToolset` | 7/7 |

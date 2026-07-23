@@ -10,7 +10,18 @@ Repository contents:
 - Port orchestration scripts.
 - Patch files.
 - Documentation.
-- Project-local adapter code under `owned/`.
+- Independently authored adapter code under `owned/`, including
+  `MaterialGraphDSLBridge`.
+
+The Material Graph DSL follows the same boundary:
+
+- `owned/MaterialGraphDSLBridge` contains the original native UE 5.7 bridge,
+  strict Python parser, and parser tests.
+- `patches/0001-generated-ue57-port.patch` contains only the registration and
+  integration changes applied to source fetched through the user's licensed
+  Epic Games access.
+- No fetched UE 5.8 source is copied into `owned/` or committed as a standalone
+  source file.
 
 Generated or downloaded during tool execution:
 

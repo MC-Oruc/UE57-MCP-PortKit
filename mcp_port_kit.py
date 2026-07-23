@@ -778,9 +778,12 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     def add_common_options(command_parser: argparse.ArgumentParser) -> None:
-        command_parser.add_argument("--project", help=argparse.SUPPRESS)
-        command_parser.add_argument("--engine-root", help=argparse.SUPPRESS)
-        command_parser.add_argument("--ue58-ref", help=argparse.SUPPRESS)
+        command_parser.add_argument(
+            "--project", help=argparse.SUPPRESS, default=argparse.SUPPRESS)
+        command_parser.add_argument(
+            "--engine-root", help=argparse.SUPPRESS, default=argparse.SUPPRESS)
+        command_parser.add_argument(
+            "--ue58-ref", help=argparse.SUPPRESS, default=argparse.SUPPRESS)
 
     install_parser = subparsers.add_parser("install")
     add_common_options(install_parser)

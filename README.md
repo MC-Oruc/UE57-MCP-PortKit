@@ -7,10 +7,35 @@ An automated utility and patch kit to backport Unreal Engine 5.8 Model Context P
 
 This kit does not vendor Unreal Engine source code. Instead, it securely sparse-fetches the pinned UE 5.8 source code from your licensed Epic Games GitHub repository, ports the plugins directly into your project's local directory, applies a pre-configured compatibility patch, builds the target, and verifies the schema.
 
+## Flagship Extension: Atomic Material Graph DSL
+
+The PortKit adds a production-ready Material Graph DSL for UE 5.7. An agent can
+read a complete material or material-function graph in one call, validate an
+atomic JSON mutation locally, and apply either a full replacement or a narrow
+patch with automatic rollback.
+
+- **Token efficient:** stable semantic node IDs and compact connections replace
+  long sequences of per-node discovery calls.
+- **Fast:** full graph reads and multi-node edits cross MCP only once.
+- **Safe:** strict schema validation, sandboxed graph operations, stable
+  expression GUIDs, dry-run support, and transaction rollback.
+- **Compile aware:** every apply returns material compile diagnostics so broken
+  graphs fail early.
+- **Complete:** supports materials, material functions, Custom HLSL named pins,
+  graph outputs, incremental add/update/remove operations, and round trips.
+
+The implementation is license-safe: the independently authored parser and
+native UE 5.7 bridge live under `owned/MaterialGraphDSLBridge`; the generated
+patch contains only the integration required inside the licensed UE 5.8
+EditorToolset source. See [Material Graph DSL](docs/MaterialGraphDSL.md).
+
 ## Project Extensions
 
-This PortKit also carries two project-specific usability extensions on top of the pinned UE 5.8 parity surface:
+This PortKit also carries project-specific usability extensions on top of the pinned UE 5.8 parity surface:
 
+- `editor_toolset.toolsets.material.MaterialTools`: an 18-tool Python material
+  surface including `get_graph_dsl_docs`, `read_graph_dsl`,
+  `validate_graph_dsl`, and `apply_graph_dsl`.
 - `EditorToolset.EditorAppToolset.ExecuteConsoleCommand`: runs editor console commands such as `viewmode unlit`.
 - `editor_toolset.toolsets.asset.AssetTools.find_assets`: the existing `name` filter now matches both case-insensitive substring text and wildcard patterns with `*` / `?` in the same argument.
 
@@ -19,10 +44,9 @@ These extensions are intentional project additions. They are not counted as UE 5
 ## Agent Tool Guidance
 
 For AI agents using the ported tool surface, start with
-[MCPToolGuidance.md](MCPToolGuidance.md). It provides the
-recommended tool-selection rules, common workflows, risky-tool guardrails, and
-an exact registered-toolset appendix so agents do not waste tokens discovering
-unrelated tools.
+[MCPToolGuidance.md](MCPToolGuidance.md). It provides recommended
+tool-selection rules, direct-call recipes, and risky-tool guardrails so agents
+do not waste tokens discovering unrelated tools.
 
 ---
 
@@ -65,7 +89,7 @@ Run these commands inside the `Scripts/ModelContextProtocolPort` directory:
 
 ## Available MCP Toolset Coverage
 
-The PortKit provides access to **414 UE 5.8 parity sub-tools** across **40 registered toolsets** (pinned to UE 5.8.0-release), plus the project extensions listed above.
+The PortKit provides access to **414 UE 5.8 parity sub-tools** across **40 parity toolsets** (pinned to UE 5.8.0-release), plus the Python-backed Material DSL toolset and the project extensions listed above. The validated runtime registry contains **41 toolsets**.
 
 ### High-Level Summary
 

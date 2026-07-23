@@ -13,15 +13,35 @@ Rule: `Available` means the tool is advertised by the validated MCP health schem
 
 The UE 5.8 parity totals below do not count these project-specific additions:
 
+- `editor_toolset.toolsets.material.MaterialTools`: an independently authored
+  18-tool Python surface. Its atomic DSL entrypoints are
+  `get_graph_dsl_docs`, `read_graph_dsl`, `validate_graph_dsl`, and
+  `apply_graph_dsl`.
 - `EditorToolset.EditorAppToolset.ExecuteConsoleCommand`: runs editor console commands such as `viewmode unlit`.
 - `editor_toolset.toolsets.asset.AssetTools.find_assets`: enhanced `name` filtering. The same `name` argument now matches case-insensitive substring text and wildcard patterns with `*` / `?`.
+
+The DSL parser and native compile-diagnostics bridge are owned code under
+`owned/MaterialGraphDSLBridge`. Only the EditorToolset registration and call
+integration are carried in the generated compatibility patch.
 
 ## Summary
 
 - UE 5.8 total sub-tools: **853**
 - Available sub-tools: **414**
 - Missing sub-tools: **439**
-- Registered toolset count: **40**
+- Registered parity toolset count: **40**
+- Registered runtime toolset count including Material DSL: **41**
+
+## Material DSL Validation
+
+- Portable PortKit install and full UE 5.7 Editor build: **pass**
+- Live schema: `editor_toolset.toolsets.material.MaterialTools` exposes **18**
+  tools
+- Atomic DSL entrypoints present: **4/4**
+- Compile diagnostics returned by apply operations: **pass**
+- Pure parser suite: **13/13 pass**
+- Test11 material-function read/round-trip/patch smoke: **pass** (36 nodes,
+  including 3 Custom HLSL nodes)
 
 ## Group Summary
 
