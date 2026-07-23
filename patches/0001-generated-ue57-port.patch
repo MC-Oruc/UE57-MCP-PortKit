@@ -26280,10 +26280,10 @@ index 0000000..3ff58ad
 +};
 diff --git a/Plugins/EditorToolset/Source/EditorToolset/Private/MaterialTools.cpp b/Plugins/EditorToolset/Source/EditorToolset/Private/MaterialTools.cpp
 new file mode 100644
-index 0000000..ee24919
+index 0000000..c3a3f9f
 --- /dev/null
 +++ b/Plugins/EditorToolset/Source/EditorToolset/Private/MaterialTools.cpp
-@@ -0,0 +1,527 @@
+@@ -0,0 +1,567 @@
 +// Copyright Epic Games, Inc. All Rights Reserved.
 +
 +#include "MaterialTools.h"
@@ -26301,7 +26301,9 @@ index 0000000..ee24919
 +#include "Materials/MaterialExpressionParameter.h"
 +#include "Materials/MaterialFunction.h"
 +#include "Materials/MaterialParameterCollection.h"
++#include "MaterialShared.h"
 +#include "Modules/ModuleManager.h"
++#include "ShaderCompiler.h"
 +
 +UMaterial* UMaterialTools::CreateMaterial(const FString& FolderPath, const FString& AssetName)
 +{
@@ -26718,17 +26720,55 @@ index 0000000..ee24919
 +
 +void UMaterialTools::Recompile(UObject* MaterialOrFunction)
 +{
++	TArray<UMaterial*> MaterialsToCompile;
 +	if (UMaterial* Material = AsMaterial(MaterialOrFunction))
 +	{
-+		UMaterialEditingLibrary::RecompileMaterial(Material);
++		MaterialsToCompile.Add(Material);
 +	}
 +	else if (UMaterialFunction* Function = AsFunction(MaterialOrFunction))
 +	{
 +		UMaterialEditingLibrary::UpdateMaterialFunction(Function);
++		for (const FAssetData& AssetData : GetReferencingMaterials(Function))
++		{
++			if (UMaterial* ReferencingMaterial = Cast<UMaterial>(AssetData.GetAsset()))
++			{
++				MaterialsToCompile.AddUnique(ReferencingMaterial);
++			}
++		}
 +	}
 +	else
 +	{
 +		RaiseError(TEXT("Expected a Material or MaterialFunction."));
++		return;
++	}
++
++	for (UMaterial* Material : MaterialsToCompile)
++	{
++		UMaterialEditingLibrary::RecompileMaterial(Material);
++	}
++
++	if (GShaderCompilingManager)
++	{
++		GShaderCompilingManager->FinishAllCompilation();
++	}
++
++	TArray<FString> Errors;
++	for (const UMaterial* Material : MaterialsToCompile)
++	{
++		const FMaterialResource* Resource = Material->GetMaterialResource(GMaxRHIShaderPlatform);
++		if (Resource)
++		{
++			for (const FString& Error : Resource->GetCompileErrors())
++			{
++				Errors.Add(FString::Printf(TEXT("%s: %s"), *Material->GetName(), *Error));
++			}
++		}
++	}
++
++	if (Errors.Num() > 0)
++	{
++		const FString CombinedErrors = FString::Join(Errors, TEXT("\n"));
++		RaiseError(CombinedErrors);
 +	}
 +}
 +
