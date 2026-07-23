@@ -1,7 +1,11 @@
-# UE 5.7 MCP PortKit
+<h1 align="center">UE 5.7 MCP PortKit</h1>
 
-[![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.7-blue.svg)](https://www.unrealengine.com/)
-[![Source Baseline](https://img.shields.io/badge/Source%20Baseline-UE%205.8%20(5.8.0--release)-orange.svg)](https://github.com/EpicGames/UnrealEngine)
+<p align="center">
+  <a href="https://www.unrealengine.com/"><img src="https://img.shields.io/badge/Unreal%20Engine-5.7-blue.svg" alt="Unreal Engine 5.7"></a>
+  <a href="https://github.com/EpicGames/UnrealEngine"><img src="https://img.shields.io/badge/Source%20Baseline-UE%205.8%20(5.8.0--release)-orange.svg" alt="Source Baseline"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/UE%20EULA-Compliant-green.svg" alt="UE EULA Compliant"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License MIT"></a>
+</p>
 
 An automated utility and patch kit to backport Unreal Engine 5.8 Model Context Protocol (MCP) editor toolsets to Unreal Engine 5.7 projects.
 
@@ -55,20 +59,28 @@ do not waste tokens discovering unrelated tools.
 The installer performs environment detection, handles authentication, clones only the necessary source trees, runs source refactoring to fit UE 5.7, compiles, and registers the ported MCP tools.
 
 ```mermaid
-graph TD
-    Start[Start: Python Script Run] --> DetectEnv["Detect .uproject & UE 5.7 Root"]
-    DetectEnv --> GitAuth["Verify Epic Games GitHub Access"]
-    
-    GitAuth --> SparseFetch["Shallow Sparse-Fetch UE 5.8 Source"]
-    SparseFetch --> ImportPlugins["Import Pinned MCP Plugins into Plugins/"]
-    
-    ImportPlugins --> ApplyPatch["Apply 0001-generated-ue57-port.patch"]
-    ApplyPatch --> EnablePlugins["Enable Ported Plugins in .uproject"]
-    
-    EnablePlugins --> Rebuild["Run Full Editor Compilation"]
-    Rebuild --> Probe["Probe MCP Toolset Schema"]
-    
-    Probe --> End["End: Verification Successful"]
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#3b82f6', 'lineColor': '#60a5fa', 'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', 'clusterBkg': '#0f172a', 'clusterBorder': '#334155' }}}%%
+graph LR
+    subgraph S1["1. Environment & Auth"]
+        A["Detect .uproject & UE 5.7"] --> B["Verify Epic GitHub Access"]
+    end
+
+    subgraph S2["2. Fetch & Patch"]
+        B --> C["Sparse-Fetch UE 5.8"]
+        C --> D["Apply UE 5.7 Patch"]
+        D --> E["Compile Editor Target"]
+    end
+
+    subgraph S3["3. Verification"]
+        E --> F["Probe MCP Toolset Schema"]
+    end
+
+    style A fill:#1e293b,stroke:#3b82f6,stroke-width:1.5px,color:#f8fafc
+    style B fill:#1e293b,stroke:#3b82f6,stroke-width:1.5px,color:#f8fafc
+    style C fill:#1e293b,stroke:#06b6d4,stroke-width:1.5px,color:#f8fafc
+    style D fill:#1e293b,stroke:#06b6d4,stroke-width:1.5px,color:#f8fafc
+    style E fill:#1e293b,stroke:#8b5cf6,stroke-width:1.5px,color:#f8fafc
+    style F fill:#1e293b,stroke:#10b981,stroke-width:2px,color:#f8fafc
 ```
 
 ---
