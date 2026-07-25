@@ -18360,10 +18360,10 @@ index 0000000..e715ef4
 +        return data_table.fill_from_json_string(json.dumps(rows), data_table.get_row_struct())
 diff --git a/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py b/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py
 new file mode 100644
-index 0000000..b71324f
+index 0000000..a132997
 --- /dev/null
 +++ b/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py
-@@ -0,0 +1,1210 @@
+@@ -0,0 +1,1224 @@
 +# Copyright Epic Games, Inc. All Rights Reserved.
 +
 +from __future__ import annotations
@@ -19101,8 +19101,8 @@ index 0000000..b71324f
 +                MaterialTools._clear_graph(material_or_function, report)
 +                MaterialTools._resolve_dsl_nodes(
 +                    material_or_function, document['nodes'], nodes, report)
-+                MaterialTools._validate_dsl_edges(material_or_function, document, nodes)
 +                MaterialTools._apply_dsl_properties(document['nodes'], nodes, report)
++                MaterialTools._validate_dsl_edges(material_or_function, document, nodes)
 +                MaterialTools._apply_dsl_connections(document['connections'], nodes, report)
 +                output_snapshots = MaterialTools._snapshot_dsl_outputs(
 +                    material_or_function, document['outputs'])
@@ -19419,6 +19419,13 @@ index 0000000..b71324f
 +    @staticmethod
 +    def _validate_dsl_input_pin(
 +            expression: unreal.MaterialExpression, pin_name: str, path: str) -> None:
++        if isinstance(expression, unreal.MaterialExpressionMaterialFunctionCall):
++            try:
++                func = expression.get_editor_property('material_function')
++                if func:
++                    unreal.MaterialEditingLibrary.update_material_function(func)
++            except Exception:
++                pass
 +        names = list(
 +            unreal.MaterialEditingLibrary.get_material_expression_input_names(expression))
 +        if (pin_name == '' and names) or pin_name in names:
@@ -19451,6 +19458,13 @@ index 0000000..b71324f
 +                    nodes[spec['id']], json.dumps(properties)):
 +                raise ValueError(
 +                    f'Node "{spec["id"]}" contains an invalid property or value.')
++            if isinstance(nodes[spec['id']], unreal.MaterialExpressionMaterialFunctionCall):
++                try:
++                    func = nodes[spec['id']].get_editor_property('material_function')
++                    if func:
++                        unreal.MaterialEditingLibrary.update_material_function(func)
++                except Exception:
++                    pass
 +            report['properties_set'] += len(properties)
 +
 +    @staticmethod
