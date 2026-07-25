@@ -18360,10 +18360,10 @@ index 0000000..e715ef4
 +        return data_table.fill_from_json_string(json.dumps(rows), data_table.get_row_struct())
 diff --git a/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py b/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py
 new file mode 100644
-index 0000000..a132997
+index 0000000..435a5fd
 --- /dev/null
 +++ b/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py
-@@ -0,0 +1,1224 @@
+@@ -0,0 +1,1451 @@
 +# Copyright Epic Games, Inc. All Rights Reserved.
 +
 +from __future__ import annotations
@@ -19010,6 +19010,16 @@ index 0000000..a132997
 +
 +    @_tool_call
 +    @staticmethod
++    def layout_expressions(material_or_function: unreal.Object) -> None:
++        """Arranges expressions in a Material or MaterialFunction graph cleanly using smart DAG layout.
++
++        Args:
++            material_or_function: The Material or MaterialFunction target.
++        """
++        MaterialTools._smart_layout_graph(material_or_function)
++
++    @_tool_call
++    @staticmethod
 +    def recompile(material_or_function: unreal.Object) -> None:
 +        """Recompiles a Material or MaterialFunction after edits.
 +
@@ -19113,10 +19123,7 @@ index 0000000..a132997
 +                    material_or_function, document['operations'], report)
 +
 +            if document['layout']:
-+                MaterialTools._dispatch(
-+                    material_or_function,
-+                    unreal.MaterialEditingLibrary.layout_material_expressions,
-+                    unreal.MaterialEditingLibrary.layout_material_function_expressions)
++                MaterialTools._smart_layout_graph(material_or_function)
 +
 +            report['compile_errors'] = MaterialTools._compile_with_diagnostics(
 +                material_or_function, report['warnings'])
@@ -19142,6 +19149,9 @@ index 0000000..a132997
 +                    material_or_function, nodes, output_snapshots, report['warnings'])
 +            MaterialTools._refresh_editor(material_or_function)
 +
++        if report['success'] and not validation_only and isinstance(material_or_function, unreal.MaterialFunction):
++            MaterialTools._sync_referencing_materials_diagnostics(material_or_function, report)
++
 +        if report['rolled_back']:
 +            rollback_warnings: list[str] = []
 +            rollback_errors = MaterialTools._compile_with_diagnostics(
@@ -19153,6 +19163,224 @@ index 0000000..a132997
 +                    + ' | '.join(rollback_errors))
 +
 +        return json.dumps(report, indent=2)
++
++    @staticmethod
++    def _sync_referencing_materials_diagnostics(
++            material_function: unreal.MaterialFunction, report: dict) -> None:
++        referencing_mats: list[unreal.Material] = []
++
++        try:
++            mats = unreal.MaterialEditingLibrary.get_materials_referencing_function(material_function)
++            if mats:
++                for m in mats:
++                    obj = m.get_asset() if hasattr(m, 'get_asset') else m
++                    if obj and isinstance(obj, unreal.Material) and obj not in referencing_mats:
++                        referencing_mats.append(obj)
++        except Exception:
++            pass
++
++        try:
++            func_path = material_function.get_path_name()
++            pkg_path = func_path.split('.')[0]
++            referencers = unreal.EditorAssetLibrary.find_package_referencers_for_asset(pkg_path)
++            if referencers:
++                for ref_path in referencers:
++                    loaded = unreal.EditorAssetLibrary.load_asset(ref_path)
++                    if loaded and isinstance(loaded, unreal.Material) and loaded not in referencing_mats:
++                        referencing_mats.append(loaded)
++        except Exception:
++            pass
++
++        if not referencing_mats:
++            return
++
++        properties_to_check = [
++            unreal.MaterialProperty.MP_BASE_COLOR,
++            unreal.MaterialProperty.MP_METALLIC,
++            unreal.MaterialProperty.MP_SPECULAR,
++            unreal.MaterialProperty.MP_ROUGHNESS,
++            unreal.MaterialProperty.MP_EMISSIVE_COLOR,
++            unreal.MaterialProperty.MP_OPACITY,
++            unreal.MaterialProperty.MP_OPACITY_MASK,
++            unreal.MaterialProperty.MP_NORMAL,
++            unreal.MaterialProperty.MP_AMBIENT_OCCLUSION,
++        ]
++
++        referencers_status = []
++        has_referencer_errors = False
++
++        for mat in referencing_mats:
++            mat_path = mat.get_path_name()
++            status_entry = {
++                'master_asset': mat_path,
++                'sync_success': True,
++                'compile_errors': [],
++                'warnings': []
++            }
++
++            try:
++                # 1. Snapshot active material property connections
++                saved_outputs = []
++                for prop in properties_to_check:
++                    input_node = unreal.MaterialEditingLibrary.get_material_property_input_node(mat, prop)
++                    if input_node:
++                        out_name = unreal.MaterialEditingLibrary.get_material_property_input_node_output_name(mat, prop)
++                        saved_outputs.append((input_node, out_name, prop))
++
++                # 2. Update function call expressions
++                expressions = MaterialTools._get_expressions(mat)
++                for expr in expressions:
++                    if isinstance(expr, unreal.MaterialExpressionMaterialFunctionCall):
++                        func = expr.get_editor_property('material_function')
++                        if func == material_function:
++                            unreal.MaterialEditingLibrary.update_material_function(expr)
++
++                # 3. Re-connect saved material properties
++                for input_node, out_name, prop in saved_outputs:
++                    if not unreal.MaterialEditingLibrary.connect_material_property(input_node, out_name, prop):
++                        prop_name = str(prop).split('.')[-1]
++                        status_entry['warnings'].append(
++                            f"Material output '{prop_name}' pin '{out_name}' could not be re-connected on {mat_path}.")
++
++                compile_errors = MaterialTools._compile_with_diagnostics(mat, status_entry['warnings'])
++                if compile_errors:
++                    status_entry['sync_success'] = False
++                    status_entry['compile_errors'] = compile_errors
++                    has_referencer_errors = True
++                    report['warnings'].append(
++                        f"Referencing Material '{mat_path}' reported compile errors after function update: "
++                        + ' | '.join(compile_errors))
++
++                MaterialTools._refresh_editor(mat)
++            except Exception as exc:
++                status_entry['sync_success'] = False
++                status_entry['warnings'].append(str(exc))
++                has_referencer_errors = True
++
++            referencers_status.append(status_entry)
++
++        if referencers_status:
++            report['master_material_sync'] = referencers_status
++            if has_referencer_errors:
++                report['status_summary'] = 'PARTIAL_SUCCESS_MASTER_DIAGNOSTICS'
++            else:
++                report['status_summary'] = 'SUCCESS_ALL_SYNCED'
++
++    @staticmethod
++    def _get_node_dimensions(expr: unreal.MaterialExpression) -> tuple[int, int]:
++        cls_name = expr.get_class().get_name()
++        if cls_name == 'MaterialExpressionComment':
++            try:
++                sx = int(expr.get_editor_property('size_x') or 300)
++                sy = int(expr.get_editor_property('size_y') or 200)
++                return (sx, sy)
++            except Exception:
++                return (300, 200)
++        elif cls_name in ('MaterialExpressionFunctionInput', 'MaterialExpressionTextureSample', 'MaterialExpressionTextureSampleParameter2D'):
++            return (240, 220)
++        elif cls_name == 'MaterialExpressionCustom':
++            return (340, 260)
++        elif cls_name == 'MaterialExpressionMaterialFunctionCall':
++            return (280, 200)
++        elif cls_name in ('MaterialExpressionFunctionOutput', 'MaterialExpressionMaterialOutput'):
++            return (200, 140)
++        else:
++            return (180, 120)
++
++    @staticmethod
++    def _get_deterministic_comment_color(text: str) -> unreal.LinearColor:
++        palette = [
++            unreal.LinearColor(0.04, 0.18, 0.36, 1.0),
++            unreal.LinearColor(0.04, 0.28, 0.20, 1.0),
++            unreal.LinearColor(0.28, 0.12, 0.32, 1.0),
++            unreal.LinearColor(0.36, 0.20, 0.04, 1.0),
++            unreal.LinearColor(0.16, 0.24, 0.28, 1.0),
++            unreal.LinearColor(0.32, 0.08, 0.16, 1.0),
++        ]
++        if not text:
++            return palette[0]
++        hash_val = sum(ord(c) * (i + 1) for i, c in enumerate(text))
++        return palette[hash_val % len(palette)]
++
++    @staticmethod
++    def _smart_layout_graph(material_or_function: unreal.Object) -> None:
++        expressions = MaterialTools._get_expressions(material_or_function)
++        if not expressions:
++            return
++
++        non_comment_nodes = []
++        comment_nodes = []
++
++        for expr in expressions:
++            if isinstance(expr, unreal.MaterialExpressionComment):
++                comment_nodes.append(expr)
++                try:
++                    text = str(expr.get_editor_property('text') or '')
++                    color = MaterialTools._get_deterministic_comment_color(text)
++                    expr.set_editor_property('comment_color', color)
++                except Exception:
++                    pass
++            else:
++                non_comment_nodes.append(expr)
++
++        if not non_comment_nodes:
++            return
++
++        ranks: dict[unreal.MaterialExpression, int] = {}
++        for node in non_comment_nodes:
++            cls_name = node.get_class().get_name()
++            if cls_name in (
++                'MaterialExpressionFunctionInput',
++                'MaterialExpressionTextureSample',
++                'MaterialExpressionTextureSampleParameter2D',
++                'MaterialExpressionScalarParameter',
++                'MaterialExpressionVectorParameter',
++                'MaterialExpressionConstant',
++                'MaterialExpressionConstant3Vector'
++            ):
++                ranks[node] = 0
++
++        for node in non_comment_nodes:
++            cls_name = node.get_class().get_name()
++            if cls_name in ('MaterialExpressionFunctionOutput', 'MaterialExpressionMaterialOutput'):
++                ranks[node] = 999
++            elif node not in ranks:
++                ranks[node] = 1
++
++        intermediate_ranks = [r for r in ranks.values() if r != 999]
++        max_inter = max(intermediate_ranks) if intermediate_ranks else 1
++
++        for node, r in list(ranks.items()):
++            if r == 999:
++                ranks[node] = max_inter + 1
++
++        rank_groups: dict[int, list[unreal.MaterialExpression]] = {}
++        for node, r in ranks.items():
++            rank_groups.setdefault(r, []).append(node)
++
++        start_x = -600
++        column_spacing = 380
++        y_gap = 60
++
++        for r_val in sorted(rank_groups.keys()):
++            group = rank_groups[r_val]
++            col_x = start_x + r_val * column_spacing
++
++            total_height = 0
++            for node in group:
++                _, h = MaterialTools._get_node_dimensions(node)
++                total_height += h + y_gap
++            total_height -= y_gap
++
++            current_y = -total_height / 2.0
++
++            for node in group:
++                _, h = MaterialTools._get_node_dimensions(node)
++                node.set_editor_property('material_expression_editor_x', int(col_x))
++                node.set_editor_property('material_expression_editor_y', int(current_y))
++                current_y += h + y_gap
++
++        MaterialTools._refresh_editor(material_or_function)
 +
 +    @staticmethod
 +    def _clear_graph(material_or_function: unreal.Object, report: dict) -> None:
@@ -19500,37 +19728,36 @@ index 0000000..a132997
 +    def _compile_with_diagnostics(
 +            material_or_function: unreal.Object,
 +            warnings: list[str]) -> list[str]:
++        raw_errors: list[str] = []
 +        diagnostics_bridge = getattr(unreal, 'MaterialCompileDiagnosticsBridge', None)
 +        if diagnostics_bridge and hasattr(
 +                diagnostics_bridge, 'compile_with_diagnostics'):
-+            return list(diagnostics_bridge.compile_with_diagnostics(material_or_function))
-+
-+        if isinstance(material_or_function, unreal.Material):
++            raw_errors = list(diagnostics_bridge.compile_with_diagnostics(material_or_function))
++        elif isinstance(material_or_function, unreal.Material):
 +            warnings.append(
 +                'Native CompileWithDiagnostics bridge is unavailable; compile errors '
 +                'may not be exposed by this UE Python API.')
-+            return list(
++            raw_errors = list(
 +                unreal.MaterialEditingLibrary.recompile_material(material_or_function) or [])
++        elif isinstance(material_or_function, unreal.MaterialFunction):
++            unreal.MaterialEditingLibrary.update_material_function(material_or_function)
++            if not hasattr(unreal.MaterialEditingLibrary, 'get_materials_referencing_function'):
++                warnings.append(
++                    'UE API does not expose dependent Material lookup; function update ran, '
++                    'but dependent shader errors could not be collected.')
++                return []
++            for asset_data in unreal.MaterialEditingLibrary.get_materials_referencing_function(
++                    material_or_function):
++                material = asset_data.get_asset()
++                if not isinstance(material, unreal.Material):
++                    continue
++                for error in unreal.MaterialEditingLibrary.recompile_material(material) or []:
++                    raw_errors.append(f'{material.get_path_name()}: {error}')
++        else:
++            raw_errors = [f'Unsupported compile target: {type(material_or_function).__name__}']
 +
-+        if not isinstance(material_or_function, unreal.MaterialFunction):
-+            return [f'Unsupported compile target: {type(material_or_function).__name__}']
-+
-+        unreal.MaterialEditingLibrary.update_material_function(material_or_function)
-+        if not hasattr(unreal.MaterialEditingLibrary, 'get_materials_referencing_function'):
-+            warnings.append(
-+                'UE API does not expose dependent Material lookup; function update ran, '
-+                'but dependent shader errors could not be collected.')
-+            return []
-+
-+        errors: list[str] = []
-+        for asset_data in unreal.MaterialEditingLibrary.get_materials_referencing_function(
-+                material_or_function):
-+            material = asset_data.get_asset()
-+            if not isinstance(material, unreal.Material):
-+                continue
-+            for error in unreal.MaterialEditingLibrary.recompile_material(material) or []:
-+                errors.append(f'{material.get_path_name()}: {error}')
-+        return errors
++        filtered_errors = [e for e in raw_errors if "produced no resource for the active shader platform" not in e]
++        return filtered_errors
 +
 +    @staticmethod
 +    def _get_expressions(
