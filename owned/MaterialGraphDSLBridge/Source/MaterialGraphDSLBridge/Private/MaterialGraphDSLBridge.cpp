@@ -2,13 +2,19 @@
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphNode.h"
 #include "MaterialEditingLibrary.h"
+#include "MaterialGraph/MaterialGraph.h"
+#include "MaterialGraph/MaterialGraphNode_Comment.h"
 #include "MaterialShared.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialExpressionComment.h"
 #include "Materials/MaterialExpressionCustom.h"
 #include "Materials/MaterialExpressionFunctionInput.h"
 #include "Materials/MaterialExpressionFunctionOutput.h"
 #include "Materials/MaterialFunction.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "ShaderCompiler.h"
@@ -18,15 +24,122 @@ namespace
 {
 	TArray<UMaterialExpression*> GetExpressions(UObject* MaterialOrFunction)
 	{
+		TArray<UMaterialExpression*> Result;
 		if (UMaterial* Material = Cast<UMaterial>(MaterialOrFunction))
 		{
-			return Material->GetExpressionCollection().Expressions;
+			Result.Append(Material->GetExpressionCollection().Expressions);
+			for (UMaterialExpressionComment* Comment : Material->GetExpressionCollection().EditorComments)
+			{
+				if (Comment)
+				{
+					Result.Add(Comment);
+				}
+			}
 		}
-		if (UMaterialFunction* Function = Cast<UMaterialFunction>(MaterialOrFunction))
+		else if (UMaterialFunction* Function = Cast<UMaterialFunction>(MaterialOrFunction))
 		{
-			return Function->GetExpressionCollection().Expressions;
+			Result.Append(Function->GetExpressionCollection().Expressions);
+			for (UMaterialExpressionComment* Comment : Function->GetExpressionCollection().EditorComments)
+			{
+				if (Comment)
+				{
+					Result.Add(Comment);
+				}
+			}
 		}
-		return {};
+		return Result;
+	}
+
+	bool NormalizeCommentCollection(
+		UObject* MaterialOrFunction,
+		UMaterialExpressionComment* Comment)
+	{
+		if (!MaterialOrFunction || !Comment)
+		{
+			return false;
+		}
+
+		FMaterialExpressionCollection* Collection = nullptr;
+		if (UMaterial* Material = Cast<UMaterial>(MaterialOrFunction))
+		{
+			Collection = &Material->GetExpressionCollection();
+			Comment->Material = Material;
+			Comment->Function = nullptr;
+		}
+		else if (UMaterialFunction* Function = Cast<UMaterialFunction>(MaterialOrFunction))
+		{
+			Collection = &Function->GetExpressionCollection();
+			Comment->Material = nullptr;
+			Comment->Function = Function;
+		}
+		else
+		{
+			return false;
+		}
+
+		MaterialOrFunction->Modify();
+		Collection->RemoveExpression(Comment);
+		Collection->AddComment(Comment);
+		return true;
+	}
+
+	UMaterialGraphNode_Comment* EnsureCommentGraphNode(
+		UMaterialExpressionComment* Comment)
+	{
+		if (!Comment)
+		{
+			return nullptr;
+		}
+		if (UMaterialGraphNode_Comment* CommentNode =
+				Cast<UMaterialGraphNode_Comment>(Comment->GraphNode))
+		{
+			return CommentNode;
+		}
+
+		UMaterialGraph* Graph = Comment->GraphNode
+			? Cast<UMaterialGraph>(Comment->GraphNode->GetGraph())
+			: nullptr;
+		if (!Graph)
+		{
+			if (const UMaterial* Material = Cast<UMaterial>(Comment->GetOuter()))
+			{
+				Graph = Material->MaterialGraph;
+			}
+		}
+		if (!Graph)
+		{
+			return nullptr;
+		}
+
+		if (Comment->GraphNode)
+		{
+			Graph->Modify();
+			Graph->RemoveNode(Comment->GraphNode);
+			Comment->GraphNode = nullptr;
+		}
+		return Graph->AddComment(Comment);
+	}
+
+	void SyncCommentGraphNode(UMaterialExpressionComment* Comment)
+	{
+		if (UMaterialGraphNode_Comment* CommentNode = EnsureCommentGraphNode(Comment))
+		{
+			CommentNode->Modify();
+			CommentNode->NodePosX = Comment->MaterialExpressionEditorX;
+			CommentNode->NodePosY = Comment->MaterialExpressionEditorY;
+			CommentNode->NodeWidth = Comment->SizeX;
+			CommentNode->NodeHeight = Comment->SizeY;
+			CommentNode->NodeComment = Comment->Text;
+			CommentNode->CommentColor = Comment->CommentColor;
+			CommentNode->FontSize = Comment->FontSize;
+			CommentNode->MoveMode = Comment->bGroupMode
+				? ECommentBoxMode::GroupMovement
+				: ECommentBoxMode::NoGroupMovement;
+			if (UEdGraph* Graph = CommentNode->GetGraph())
+			{
+				Graph->NotifyGraphChanged();
+			}
+		}
 	}
 
 	TArray<FAssetData> GetReferencingMaterials(UMaterialFunction* MaterialFunction)
@@ -126,6 +239,21 @@ namespace
 		const FString Json = UToolsetLibrary::GetObjectProperties(Expression, PropertyNames);
 		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
 		FJsonSerializer::Deserialize(Reader, Result);
+
+		if (const UMaterialExpressionComment* Comment = Cast<UMaterialExpressionComment>(Expression))
+		{
+			Result->SetNumberField(TEXT("SizeX"), Comment->SizeX);
+			Result->SetNumberField(TEXT("SizeY"), Comment->SizeY);
+			Result->SetStringField(TEXT("Text"), Comment->Text);
+			Result->SetNumberField(TEXT("FontSize"), Comment->FontSize);
+			TSharedPtr<FJsonObject> ColorObj = MakeShared<FJsonObject>();
+			ColorObj->SetNumberField(TEXT("r"), Comment->CommentColor.R);
+			ColorObj->SetNumberField(TEXT("g"), Comment->CommentColor.G);
+			ColorObj->SetNumberField(TEXT("b"), Comment->CommentColor.B);
+			ColorObj->SetNumberField(TEXT("a"), Comment->CommentColor.A);
+			Result->SetObjectField(TEXT("CommentColor"), ColorObj);
+		}
+
 		return Result;
 	}
 
@@ -214,6 +342,53 @@ namespace
 	}
 }
 
+TArray<UMaterialExpression*>
+UMaterialGraphDSLBridge::GetExpressionsAndComments(
+	UObject* MaterialOrFunction)
+{
+	return GetExpressions(MaterialOrFunction);
+}
+
+TArray<FMaterialGraphCommentInfo>
+UMaterialGraphDSLBridge::GetGraphComments(
+	UObject* MaterialOrFunction)
+{
+	TArray<FMaterialGraphCommentInfo> Result;
+	TSet<FString> UsedNodeIds;
+	for (UMaterialExpression* Expression : GetExpressions(MaterialOrFunction))
+	{
+		if (!Expression)
+		{
+			continue;
+		}
+
+		const FString NodeId = MakeSemanticNodeId(Expression, UsedNodeIds);
+		const UMaterialExpressionComment* Comment =
+			Cast<UMaterialExpressionComment>(Expression);
+		if (!Comment)
+		{
+			continue;
+		}
+
+		FMaterialGraphCommentInfo& Info = Result.AddDefaulted_GetRef();
+		Info.NodeId = NodeId;
+		Info.Guid = GuidToDsl(
+			const_cast<UMaterialExpressionComment*>(Comment)
+				->GetMaterialExpressionId());
+		Info.Text = Comment->Text;
+		Info.X = Comment->MaterialExpressionEditorX;
+		Info.Y = Comment->MaterialExpressionEditorY;
+		Info.SizeX = Comment->SizeX;
+		Info.SizeY = Comment->SizeY;
+		Info.FontSize = Comment->FontSize;
+		Info.ColorR = Comment->CommentColor.R;
+		Info.ColorG = Comment->CommentColor.G;
+		Info.ColorB = Comment->CommentColor.B;
+		Info.ColorA = Comment->CommentColor.A;
+	}
+	return Result;
+}
+
 TArray<FString> UMaterialCompileDiagnosticsBridge::CompileWithDiagnostics(
 	UObject* MaterialOrFunction)
 {
@@ -271,7 +446,7 @@ TArray<FString> UMaterialCompileDiagnosticsBridge::CompileWithDiagnostics(
 	return Errors;
 }
 
-FString UMaterialCompileDiagnosticsBridge::ExportGraphDsl(UObject* MaterialOrFunction)
+FString UMaterialGraphDSLBridge::ExportGraphDsl(UObject* MaterialOrFunction)
 {
 	UMaterial* Material = Cast<UMaterial>(MaterialOrFunction);
 	UMaterialFunction* Function = Cast<UMaterialFunction>(MaterialOrFunction);
@@ -430,22 +605,30 @@ FString UMaterialCompileDiagnosticsBridge::ExportGraphDsl(UObject* MaterialOrFun
 	Root->SetBoolField(TEXT("layout"), false);
 
 	FString Result;
-	const TSharedRef<TJsonWriter<>> Writer =
-		TJsonWriterFactory<>::Create(&Result);
+	const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Result);
 	FJsonSerializer::Serialize(Root.ToSharedRef(), Writer);
 	return Result;
 }
 
-int32 UMaterialCompileDiagnosticsBridge::ClearGraph(UObject* MaterialOrFunction)
+int32 UMaterialGraphDSLBridge::ClearGraph(UObject* MaterialOrFunction)
 {
 	const TArray<UMaterialExpression*> Expressions = GetExpressions(MaterialOrFunction);
 	if (UMaterial* Material = Cast<UMaterial>(MaterialOrFunction))
 	{
 		for (int32 Index = Expressions.Num() - 1; Index >= 0; --Index)
 		{
-			UMaterialEditingLibrary::DeleteMaterialExpression(
-				Material,
-				Expressions[Index]);
+			if (UMaterialExpressionComment* Comment =
+					Cast<UMaterialExpressionComment>(Expressions[Index]))
+			{
+				DeleteMaterialComment(Material, Comment);
+			}
+			else
+			{
+				UMaterialEditingLibrary::DeleteMaterialExpression(
+					Material,
+					Expressions[Index]);
+			}
 		}
 		Material->MarkPackageDirty();
 	}
@@ -454,9 +637,17 @@ int32 UMaterialCompileDiagnosticsBridge::ClearGraph(UObject* MaterialOrFunction)
 	{
 		for (int32 Index = Expressions.Num() - 1; Index >= 0; --Index)
 		{
-			UMaterialEditingLibrary::DeleteMaterialExpressionInFunction(
-				Function,
-				Expressions[Index]);
+			if (UMaterialExpressionComment* Comment =
+					Cast<UMaterialExpressionComment>(Expressions[Index]))
+			{
+				DeleteMaterialComment(Function, Comment);
+			}
+			else
+			{
+				UMaterialEditingLibrary::DeleteMaterialExpressionInFunction(
+					Function,
+					Expressions[Index]);
+			}
 		}
 		Function->MarkPackageDirty();
 	}
@@ -467,7 +658,7 @@ int32 UMaterialCompileDiagnosticsBridge::ClearGraph(UObject* MaterialOrFunction)
 	return Expressions.Num();
 }
 
-UMaterialExpression* UMaterialCompileDiagnosticsBridge::FindExpressionByGuid(
+UMaterialExpression* UMaterialGraphDSLBridge::FindExpressionByGuid(
 	UObject* MaterialOrFunction,
 	const FString& Guid)
 {
@@ -486,7 +677,7 @@ UMaterialExpression* UMaterialCompileDiagnosticsBridge::FindExpressionByGuid(
 	return nullptr;
 }
 
-bool UMaterialCompileDiagnosticsBridge::SetExpressionIdentity(
+bool UMaterialGraphDSLBridge::SetExpressionIdentity(
 	UMaterialExpression* Expression,
 	const FString& NodeGuid,
 	const FString& InterfaceGuid,
@@ -540,7 +731,7 @@ bool UMaterialCompileDiagnosticsBridge::SetExpressionIdentity(
 	return true;
 }
 
-bool UMaterialCompileDiagnosticsBridge::ConfigureCustomPins(
+bool UMaterialGraphDSLBridge::ConfigureCustomPins(
 	UMaterialExpression* Expression,
 	const TArray<FString>& InputNames,
 	const TArray<FString>& OutputNames,
@@ -581,7 +772,7 @@ bool UMaterialCompileDiagnosticsBridge::ConfigureCustomPins(
 	return true;
 }
 
-bool UMaterialCompileDiagnosticsBridge::DisconnectExpressionInput(
+bool UMaterialGraphDSLBridge::DisconnectExpressionInput(
 	UMaterialExpression* Expression,
 	const FString& InputName)
 {
@@ -612,7 +803,7 @@ bool UMaterialCompileDiagnosticsBridge::DisconnectExpressionInput(
 	return false;
 }
 
-bool UMaterialCompileDiagnosticsBridge::DisconnectMaterialOutput(
+bool UMaterialGraphDSLBridge::DisconnectMaterialOutput(
 	UMaterial* Material,
 	const EMaterialProperty MaterialProperty)
 {
@@ -629,5 +820,184 @@ bool UMaterialCompileDiagnosticsBridge::DisconnectMaterialOutput(
 	Input->Expression = nullptr;
 	Material->Modify();
 	Material->MarkPackageDirty();
+	return true;
+}
+
+UMaterialExpressionComment* UMaterialGraphDSLBridge::CreateMaterialComment(
+	UObject* MaterialOrFunction,
+	int32 NodePosX,
+	int32 NodePosY)
+{
+	if (!Cast<UMaterial>(MaterialOrFunction) &&
+		!Cast<UMaterialFunction>(MaterialOrFunction))
+	{
+		return nullptr;
+	}
+
+	MaterialOrFunction->Modify();
+	UMaterialExpressionComment* NewComment =
+		NewObject<UMaterialExpressionComment>(
+			MaterialOrFunction,
+			UMaterialExpressionComment::StaticClass(),
+			NAME_None,
+			RF_Transactional);
+	NewComment->MaterialExpressionEditorX = NodePosX;
+	NewComment->MaterialExpressionEditorY = NodePosY;
+	NewComment->SizeX = 400;
+	NewComment->SizeY = 100;
+	NewComment->Text =
+		NSLOCTEXT("MaterialGraphDSL", "DefaultCommentText", "Comment").ToString();
+	NewComment->UpdateMaterialExpressionGuid(true, true);
+	NormalizeCommentCollection(MaterialOrFunction, NewComment);
+	SyncCommentGraphNode(NewComment);
+	NewComment->MarkPackageDirty();
+	MaterialOrFunction->MarkPackageDirty();
+
+	return NewComment;
+}
+
+bool UMaterialGraphDSLBridge::DeleteMaterialComment(
+	UObject* MaterialOrFunction,
+	UMaterialExpressionComment* Comment)
+{
+	if (!MaterialOrFunction || !Comment)
+	{
+		return false;
+	}
+
+	FMaterialExpressionCollection* Collection = nullptr;
+	if (UMaterial* Material = Cast<UMaterial>(MaterialOrFunction))
+	{
+		Collection = &Material->GetExpressionCollection();
+	}
+	else if (UMaterialFunction* Function = Cast<UMaterialFunction>(MaterialOrFunction))
+	{
+		Collection = &Function->GetExpressionCollection();
+	}
+	if (!Collection ||
+		(!Collection->EditorComments.Contains(Comment) &&
+		 !Collection->Expressions.Contains(Comment)))
+	{
+		return false;
+	}
+
+	MaterialOrFunction->Modify();
+	Comment->Modify();
+	if (Comment->GraphNode)
+	{
+		if (UEdGraph* Graph = Comment->GraphNode->GetGraph())
+		{
+			Graph->Modify();
+			Graph->RemoveNode(Comment->GraphNode);
+			Graph->NotifyGraphChanged();
+		}
+		Comment->GraphNode = nullptr;
+	}
+	Collection->RemoveExpression(Comment);
+	Collection->RemoveComment(Comment);
+	Comment->MarkAsGarbage();
+	MaterialOrFunction->MarkPackageDirty();
+	return true;
+}
+
+bool UMaterialGraphDSLBridge::SetMaterialCommentProperties(
+	UMaterialExpressionComment* Comment,
+	const FString& PropertiesJson)
+{
+	if (!Comment)
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> Properties;
+	const TSharedRef<TJsonReader<>> Reader =
+		TJsonReaderFactory<>::Create(PropertiesJson);
+	if (!FJsonSerializer::Deserialize(Reader, Properties) || !Properties.IsValid())
+	{
+		return false;
+	}
+
+	UObject* Owner = Comment->Material
+		? static_cast<UObject*>(Comment->Material)
+		: static_cast<UObject*>(Comment->Function);
+	if (!Owner)
+	{
+		Owner = Comment->GetOuter();
+	}
+	if (!NormalizeCommentCollection(Owner, Comment))
+	{
+		return false;
+	}
+
+	Comment->Modify();
+	for (const TPair<UE::FSharedString, TSharedPtr<FJsonValue>>& Pair :
+		 Properties->Values)
+	{
+		FString Key = FString(*Pair.Key).ToLower();
+		Key.ReplaceInline(TEXT("_"), TEXT(""));
+		if (Key == TEXT("sizex") || Key == TEXT("sizey") ||
+			Key == TEXT("fontsize"))
+		{
+			double Value = 0.0;
+			if (!Pair.Value->TryGetNumber(Value))
+			{
+				return false;
+			}
+			const int32 IntegerValue = FMath::Max(1, FMath::TruncToInt(Value));
+			if (Key == TEXT("sizex"))
+			{
+				Comment->SizeX = IntegerValue;
+			}
+			else if (Key == TEXT("sizey"))
+			{
+				Comment->SizeY = IntegerValue;
+			}
+			else
+			{
+				Comment->FontSize = IntegerValue;
+			}
+		}
+		else if (Key == TEXT("text"))
+		{
+			if (!Pair.Value->TryGetString(Comment->Text))
+			{
+				return false;
+			}
+		}
+		else if (Key == TEXT("commentcolor"))
+		{
+			const TSharedPtr<FJsonObject>* Color = nullptr;
+			if (!Pair.Value->TryGetObject(Color) || !Color || !Color->IsValid())
+			{
+				return false;
+			}
+			double Channel = 0.0;
+			if ((*Color)->TryGetNumberField(TEXT("r"), Channel))
+			{
+				Comment->CommentColor.R = static_cast<float>(Channel);
+			}
+			if ((*Color)->TryGetNumberField(TEXT("g"), Channel))
+			{
+				Comment->CommentColor.G = static_cast<float>(Channel);
+			}
+			if ((*Color)->TryGetNumberField(TEXT("b"), Channel))
+			{
+				Comment->CommentColor.B = static_cast<float>(Channel);
+			}
+			if ((*Color)->TryGetNumberField(TEXT("a"), Channel))
+			{
+				Comment->CommentColor.A = static_cast<float>(Channel);
+			}
+		}
+		else
+		{
+			return false;
+		}
+	}
+
+	SyncCommentGraphNode(Comment);
+	Comment->PostEditChange();
+	Comment->MarkPackageDirty();
+	Owner->MarkPackageDirty();
 	return true;
 }
