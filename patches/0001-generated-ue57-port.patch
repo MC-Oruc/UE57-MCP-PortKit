@@ -7685,10 +7685,10 @@ index 0000000..df5cbe8
 +                    unreal.AttributeMetaData.static_struct())
 diff --git a/Plugins/EditorToolset/Content/Python/editor_toolset/tests/test_material.py b/Plugins/EditorToolset/Content/Python/editor_toolset/tests/test_material.py
 new file mode 100644
-index 0000000..644bb07
+index 0000000..89e067a
 --- /dev/null
 +++ b/Plugins/EditorToolset/Content/Python/editor_toolset/tests/test_material.py
-@@ -0,0 +1,625 @@
+@@ -0,0 +1,764 @@
 +# Copyright Epic Games, Inc. All Rights Reserved.
 +
 +from contextlib import ExitStack
@@ -7792,7 +7792,7 @@ index 0000000..644bb07
 +    def test_validate_graph_dsl_rolls_back_valid_graph(self):
 +        """Ensures validation compiles the proposed graph without retaining nodes."""
 +        count_before = MaterialTools._get_expression_count(self.mat)
-+        report = json.loads(MaterialTools.validate_graph_dsl(self.mat, json.dumps({
++        report = MaterialTools.validate_graph_dsl(self.mat, json.dumps({
 +            'version': 3,
 +            'mode': 'replace',
 +            'nodes': [{
@@ -7803,16 +7803,16 @@ index 0000000..644bb07
 +            'outputs': [{
 +                'from': 'roughness', 'output': '', 'property': 'MP_ROUGHNESS',
 +            }],
-+        })))
-+        self.assertTrue(report['success'])
-+        self.assertTrue(report['rolled_back'])
-+        self.assertEqual(report['compile_errors'], [])
++        }))
++        self.assertTrue(report.success)
++        self.assertTrue(report.rolled_back)
++        self.assertEqual(list(report.compile_errors), [])
 +        self.assertEqual(MaterialTools._get_expression_count(self.mat), count_before)
 +
 +    def test_apply_graph_dsl_compile_error_reports_and_rolls_back(self):
 +        """Ensures invalid shader graphs return diagnostics and leave no partial nodes."""
 +        count_before = MaterialTools._get_expression_count(self.mat)
-+        report = json.loads(MaterialTools.apply_graph_dsl(self.mat, json.dumps({
++        report = MaterialTools.apply_graph_dsl(self.mat, json.dumps({
 +            'version': 3,
 +            'mode': 'replace',
 +            'nodes': [{
@@ -7822,11 +7822,66 @@ index 0000000..644bb07
 +            'outputs': [{
 +                'from': 'missing_texture', 'output': 'RGB', 'property': 'MP_BASE_COLOR',
 +            }],
-+        })))
-+        self.assertFalse(report['success'])
-+        self.assertTrue(report['rolled_back'])
-+        self.assertGreater(len(report['compile_errors']), 0)
++        }))
++        self.assertFalse(report.success)
++        self.assertTrue(report.rolled_back)
++        self.assertGreater(len(report.compile_errors), 0)
 +        self.assertEqual(MaterialTools._get_expression_count(self.mat), count_before)
++
++    def test_operation_report_exposes_failed_master_path_and_reason(self):
++        """Ensures downstream Material failures remain actionable in the compact report."""
++        report = MaterialTools._make_operation_report({
++            'success': True,
++            'master_material_sync': [{
++                'master_asset': '/Game/Materials/M_Master.M_Master',
++                'sync_success': False,
++                'failure_reason': 'RuntimeError: diagnostic probe failed',
++            }],
++        })
++        self.assertEqual(report.operation_counts['master_materials_failed'], 1)
++        self.assertEqual(
++            report.master_material_failures['/Game/Materials/M_Master.M_Master'],
++            'RuntimeError: diagnostic probe failed')
++
++    def test_graph_dsl_comment_round_trip_uses_structured_summary(self):
++        """Ensures Material comments have structured summaries and compact UTF-8 graph JSON."""
++        report = MaterialTools.apply_graph_dsl(self.mat, json.dumps({
++            'version': 3,
++            'mode': 'replace',
++            'nodes': [{
++                'id': 'comment',
++                'class': 'MaterialExpressionComment',
++                'x': -200,
++                'y': -100,
++                'properties': {
++                    'Text': 'Yüzey Özellikleri',
++                    'SizeX': 480,
++                    'SizeY': 160,
++                },
++            }],
++        }))
++        self.assertTrue(report.success)
++        self.assertEqual(report.operation_counts['nodes_created'], 1)
++        self.assertEqual(report.operation_counts['properties_set'], 3)
++
++        graph_json = MaterialTools.read_graph_dsl(self.mat)
++        self.assertNotIn('\n', graph_json)
++        self.assertIn('Yüzey Özellikleri', graph_json)
++        self.assertNotIn('\\u00', graph_json)
++        graph = json.loads(graph_json)
++        comments = [
++            node for node in graph['nodes']
++            if node['class'].endswith('MaterialExpressionComment')
++        ]
++        self.assertEqual(len(comments), 1)
++        self.assertEqual(comments[0]['properties']['SizeX'], 480)
++        self.assertEqual(comments[0]['properties']['SizeY'], 160)
++        summaries = MaterialTools.get_graph_comments(self.mat)
++        self.assertEqual(len(summaries), 1)
++        self.assertIsInstance(summaries[0], unreal.MaterialGraphCommentInfo)
++        self.assertEqual(summaries[0].node_id, 'comment')
++        self.assertEqual(summaries[0].text, 'Yüzey Özellikleri')
++        self.assertEqual(summaries[0].size_x, 480)
 +
 +    def test_add_expression_invalid_class(self):
 +        """Ensures that passing a non-MaterialExpression class raises an error."""
@@ -7963,6 +8018,8 @@ index 0000000..644bb07
 +            self.mat, unreal.MaterialExpressionAdd.static_class())
 +        MaterialTools.connect_expressions(const, '', add, 'A')
 +        wiring = {w.input_name: w for w in MaterialTools.get_expression_inputs(self.mat, add)}
++        self.assertIsInstance(
++            wiring['A'], unreal.EditorToolsetMaterialInputSource)
 +        self.assertEqual(wiring['A'].expression, const)
 +        self.assertEqual(wiring['A'].output_name, '')
 +
@@ -8175,6 +8232,88 @@ index 0000000..644bb07
 +            self.func, unreal.MaterialExpressionConstant.static_class(), x=-300, y=150)
 +        self.assertEqual(expr.get_editor_property('material_expression_editor_x'), -300)
 +        self.assertEqual(expr.get_editor_property('material_expression_editor_y'), 150)
++
++    def test_graph_dsl_comment_create_update_delete(self):
++        """Ensures MaterialFunction comments use the dedicated comment collection lifecycle."""
++        apply_report = MaterialTools.apply_graph_dsl(self.func, json.dumps({
++            'version': 3,
++            'mode': 'replace',
++            'nodes': [{
++                'id': 'comment',
++                'class': 'MaterialExpressionComment',
++                'x': -300,
++                'y': -200,
++                'properties': {
++                    'Text': 'Fonksiyon Açıklaması',
++                    'SizeX': 500,
++                    'SizeY': 180,
++                    'FontSize': 20,
++                },
++            }],
++        }))
++        self.assertTrue(apply_report.success)
++
++        graph = json.loads(MaterialTools.read_graph_dsl(self.func))
++        comments = [
++            node for node in graph['nodes']
++            if node['class'].endswith('MaterialExpressionComment')
++        ]
++        self.assertEqual(len(comments), 1)
++        self.assertEqual(comments[0]['properties']['Text'], 'Fonksiyon Açıklaması')
++        self.assertEqual(comments[0]['properties']['SizeX'], 500)
++
++        patch_report = MaterialTools.apply_graph_dsl(self.func, json.dumps({
++            'version': 3,
++            'mode': 'patch',
++            'operations': {
++                'update_nodes': [{
++                    'target': comments[0]['guid'],
++                    'x': -250,
++                    'properties': {'Text': 'Güncel Açıklama'},
++                }],
++            },
++        }))
++        self.assertTrue(patch_report.success)
++        updated = json.loads(MaterialTools.read_graph_dsl(self.func))
++        self.assertEqual(updated['nodes'][0]['properties']['Text'], 'Güncel Açıklama')
++
++        delete_report = MaterialTools.apply_graph_dsl(self.func, json.dumps({
++            'version': 3,
++            'mode': 'patch',
++            'operations': {
++                'delete_nodes': [comments[0]['guid']],
++            },
++        }))
++        self.assertTrue(delete_report.success)
++        self.assertEqual(json.loads(MaterialTools.read_graph_dsl(self.func))['nodes'], [])
++
++    def test_graph_dsl_migrates_legacy_function_comment_expression(self):
++        """Ensures old generic comment expressions move into the comment collection."""
++        legacy = unreal.MaterialEditingLibrary.create_material_expression_in_function(
++            self.func, unreal.MaterialExpressionComment.static_class(),
++            node_pos_x=0, node_pos_y=0)
++        self.assertIsInstance(legacy, unreal.MaterialExpressionComment)
++        graph = json.loads(MaterialTools.read_graph_dsl(self.func))
++        comment = next(
++            node for node in graph['nodes']
++            if node['class'].endswith('MaterialExpressionComment'))
++
++        report = MaterialTools.apply_graph_dsl(self.func, json.dumps({
++            'version': 3,
++            'mode': 'patch',
++            'operations': {
++                'update_nodes': [{
++                    'target': comment['guid'],
++                    'properties': {'Text': 'Migrated'},
++                }],
++            },
++        }))
++        self.assertTrue(report.success)
++        native_expressions = list(
++            unreal.MaterialEditingLibrary.get_material_function_expressions(self.func))
++        self.assertNotIn(legacy, native_expressions)
++        exported = json.loads(MaterialTools.read_graph_dsl(self.func))
++        self.assertEqual(exported['nodes'][0]['properties']['Text'], 'Migrated')
 +
 +    def test_add_expression_invalid_class(self):
 +        """Ensures that passing a non-MaterialExpression class raises an error."""
@@ -18360,10 +18499,10 @@ index 0000000..e715ef4
 +        return data_table.fill_from_json_string(json.dumps(rows), data_table.get_row_struct())
 diff --git a/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py b/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py
 new file mode 100644
-index 0000000..435a5fd
+index 0000000..966f424
 --- /dev/null
 +++ b/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py
-@@ -0,0 +1,1451 @@
+@@ -0,0 +1,1719 @@
 +# Copyright Epic Games, Inc. All Rights Reserved.
 +
 +from __future__ import annotations
@@ -18379,35 +18518,46 @@ index 0000000..435a5fd
 +_ORIGINAL_TOOL_CALL = toolset_registry.tool_call
 +
 +
++def _compact_json(value) -> str:
++    return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
++
++
 +def _has_material_api(name: str) -> bool:
 +    return hasattr(unreal.MaterialEditingLibrary, name)
++
++
++def _has_native_material_bridge(name: str) -> bool:
++    bridge = getattr(unreal, 'MaterialTools', None)
++    return bridge is not None and hasattr(bridge, name)
 +
 +
 +def _unsupported_material_tools() -> set[str]:
 +    unsupported: set[str] = set()
 +
-+    if not (_has_material_api('get_material_expressions') and
-+            _has_material_api('get_material_function_expressions')):
-+        unsupported.update({'get_expressions', 'list_parameter_groups'})
-+
-+    if not _has_material_api('get_material_expression_output_names'):
++    if not (_has_material_api('get_material_expression_output_names')
++            or _has_native_material_bridge('get_expression_output_names')):
 +        unsupported.add('get_expression_output_names')
 +
-+    if not _has_material_api('disconnect_material_expressions'):
++    if not (_has_material_api('disconnect_material_expressions')
++            or _has_native_material_bridge('disconnect_expressions')):
 +        unsupported.add('disconnect_expressions')
 +
 +    if not (_has_material_api('get_inputs_for_material_expression') and
 +            _has_material_api('get_inputs_for_material_function_expression') and
-+            _has_material_api('get_input_node_output_name_for_material_expression')):
++            _has_material_api('get_input_node_output_name_for_material_expression')) \
++            and not _has_native_material_bridge('get_expression_inputs'):
 +        unsupported.add('get_expression_inputs')
 +
-+    if not _has_material_api('disconnect_material_property'):
++    if not (_has_material_api('disconnect_material_property')
++            or _has_native_material_bridge('disconnect_from_output')):
 +        unsupported.add('disconnect_from_output')
 +
-+    if not _has_material_api('delete_unused_expressions'):
++    if not (_has_material_api('delete_unused_expressions')
++            or _has_native_material_bridge('delete_unused_expressions')):
 +        unsupported.add('delete_unused_expressions')
 +
-+    if not _has_material_api('get_materials_referencing_function'):
++    if not (_has_material_api('get_materials_referencing_function')
++            or _has_native_material_bridge('get_referencing_materials')):
 +        unsupported.add('get_referencing_materials')
 +
 +    return unsupported
@@ -18424,15 +18574,18 @@ index 0000000..435a5fd
 +
 +
 +@unreal.ustruct()
-+class MaterialInputSource(unreal.StructBase):
-+    """Describes the source feeding either an expression input pin or a material output property.
-+
-+    input_name carries the pin name when the destination is an expression input,
-+    and is empty when the destination is a fixed material output property.
-+    """
-+    input_name = unreal.uproperty(str)
-+    expression = unreal.uproperty(unreal.MaterialExpression)
-+    output_name = unreal.uproperty(str)
++class MaterialGraphOperationReport(unreal.StructBase):
++    """Compact structured result for Material Graph DSL validation and apply calls."""
++    success = unreal.uproperty(bool)
++    rolled_back = unreal.uproperty(bool)
++    target_untouched = unreal.uproperty(bool)
++    backup_restored = unreal.uproperty(bool)
++    status_summary = unreal.uproperty(str)
++    operation_counts = unreal.uproperty(unreal.Map(str, int))
++    master_material_failures = unreal.uproperty(unreal.Map(str, str))
++    compile_errors = unreal.uproperty(unreal.Array(str))
++    errors = unreal.uproperty(unreal.Array(str))
++    warnings = unreal.uproperty(unreal.Array(str))
 +
 +
 +@unreal.uclass()
@@ -18519,7 +18672,7 @@ index 0000000..435a5fd
 +        connections and Material output connections.
 +        """
 +        MaterialTools._dispatch(material_or_function, lambda _: None, lambda _: None)
-+        bridge = getattr(unreal, 'MaterialCompileDiagnosticsBridge', None)
++        bridge = getattr(unreal, 'MaterialGraphDSLBridge', None)
 +        if not bridge or not hasattr(bridge, 'export_graph_dsl'):
 +            raise RuntimeError(
 +                'Native ExportGraphDsl bridge is unavailable. Build and restart the editor.')
@@ -18529,7 +18682,17 @@ index 0000000..435a5fd
 +
 +    @_tool_call
 +    @staticmethod
-+    def validate_graph_dsl(material_or_function: unreal.Object, code: str) -> str:
++    def get_graph_comments(
++            material_or_function: unreal.Object) -> list[unreal.MaterialGraphCommentInfo]:
++        """Returns only comment nodes without exporting the complete graph."""
++        return list(MaterialTools._dsl_bridge().get_graph_comments(
++            material_or_function))
++
++    @_tool_call
++    @staticmethod
++    def validate_graph_dsl(
++            material_or_function: unreal.Object,
++            code: str) -> MaterialGraphOperationReport:
 +        """Validates a Material Graph DSL document without retaining graph changes.
 +
 +        Validation includes JSON syntax, classes, object references, properties, pins,
@@ -18538,40 +18701,51 @@ index 0000000..435a5fd
 +
 +        Args:
 +            material_or_function: Material or MaterialFunction used as validation context.
-+            code: Strict JSON Material Graph DSL document.
++            code: Strict JSON Material Graph DSL document. Replace mode uses root.nodes;
++                patch mode uses root.operations with add_nodes, update_nodes, delete_nodes,
++                connect, disconnect, set_outputs, and clear_outputs arrays.
 +
 +        Returns:
-+            JSON report with success, errors, compile_errors and operation counts.
++            Structured report with success, errors, compile errors and non-zero counts.
 +        """
++        return MaterialTools._make_operation_report(
++            MaterialTools._validate_graph_dsl(material_or_function, code))
++
++    @staticmethod
++    def _validate_graph_dsl(
++            material_or_function: unreal.Object,
++            code: str) -> dict:
 +        MaterialTools._dispatch(material_or_function, lambda _: None, lambda _: None)
 +        try:
 +            document = material_dsl.parse(code)
 +        except material_dsl.MaterialDSLValidationError:
-+            report = json.loads(MaterialTools._execute_graph_dsl(
-+                material_or_function, code, validation_only=True))
++            report = MaterialTools._execute_graph_dsl(
++                material_or_function, code, validation_only=True)
 +            report['target_untouched'] = True
-+            return json.dumps(report, indent=2)
++            return report
 +        sandbox = unreal.new_object(material_or_function.get_class())
 +        if document['mode'] == 'patch':
 +            base_code = MaterialTools.read_graph_dsl(material_or_function)
-+            base_report = json.loads(MaterialTools._execute_graph_dsl(
-+                sandbox, base_code, validation_only=False))
++            base_report = MaterialTools._execute_graph_dsl(
++                sandbox, base_code, validation_only=False)
 +            if not base_report['success']:
 +                base_report['errors'].insert(
 +                    0, 'Could not construct the patch validation sandbox.')
 +                base_report['validation_only'] = True
 +                base_report['target_untouched'] = True
-+                return json.dumps(base_report, indent=2)
-+        report = json.loads(MaterialTools._execute_graph_dsl(
-+            sandbox, code, validation_only=False))
++                return base_report
++        report = MaterialTools._execute_graph_dsl(
++            sandbox, code, validation_only=False)
 +        report['validation_only'] = True
 +        report['rolled_back'] = True
 +        report['target_untouched'] = True
-+        return json.dumps(report, indent=2)
++        return report
 +
 +    @_tool_call
 +    @staticmethod
-+    def apply_graph_dsl(material_or_function: unreal.Object, code: str) -> str:
++    def apply_graph_dsl(
++            material_or_function: unreal.Object,
++            code: str) -> MaterialGraphOperationReport:
 +        """Atomically applies and compiles a Material Graph DSL document.
 +
 +        Any syntax, reference, property, pin, connection or compile failure cancels the
@@ -18580,39 +18754,46 @@ index 0000000..435a5fd
 +
 +        Args:
 +            material_or_function: Material or MaterialFunction graph to modify.
-+            code: Strict JSON Material Graph DSL document.
++            code: Strict JSON Material Graph DSL document. Replace mode uses root.nodes;
++                patch mode uses root.operations with add_nodes, update_nodes, delete_nodes,
++                connect, disconnect, set_outputs, and clear_outputs arrays.
 +
 +        Returns:
-+            JSON report with success, rolled_back, errors, compile_errors and counts.
++            Structured report with success, rollback state, errors and non-zero counts.
 +        """
++        return MaterialTools._make_operation_report(
++            MaterialTools._apply_graph_dsl(material_or_function, code))
++
++    @staticmethod
++    def _apply_graph_dsl(material_or_function: unreal.Object, code: str) -> dict:
 +        try:
 +            document = material_dsl.parse(code)
 +        except material_dsl.MaterialDSLValidationError:
 +            return MaterialTools._execute_graph_dsl(
 +                material_or_function, code, validation_only=False)
 +
-+        preflight = json.loads(MaterialTools.validate_graph_dsl(material_or_function, code))
++        preflight = MaterialTools._validate_graph_dsl(material_or_function, code)
 +        if not preflight['success']:
 +            preflight['apply_preflight'] = True
 +            preflight['target_untouched'] = True
-+            return json.dumps(preflight, indent=2)
++            return preflight
 +
 +        backup_code = MaterialTools.read_graph_dsl(material_or_function)
-+        report = json.loads(MaterialTools._execute_graph_dsl(
-+            material_or_function, code, validation_only=False))
++        report = MaterialTools._execute_graph_dsl(
++            material_or_function, code, validation_only=False)
 +        report['apply_preflight'] = True
 +        if report['success']:
 +            report['backup_restored'] = False
-+            return json.dumps(report, indent=2)
++            return report
 +
-+        restore_report = json.loads(MaterialTools._execute_graph_dsl(
-+            material_or_function, backup_code, validation_only=False))
++        restore_report = MaterialTools._execute_graph_dsl(
++            material_or_function, backup_code, validation_only=False)
 +        report['backup_restored'] = bool(restore_report['success'])
 +        if not restore_report['success']:
 +            report['errors'].append(
 +                'CRITICAL: Graph apply failed and backup restoration also failed: '
 +                + ' | '.join(restore_report['errors'] + restore_report['compile_errors']))
-+        return json.dumps(report, indent=2)
++        return report
 +
 +    @_tool_call
 +    @staticmethod
@@ -18691,11 +18872,7 @@ index 0000000..435a5fd
 +            material_or_function: The Material or MaterialFunction that owns the expression.
 +            expression: The expression node to remove.
 +        """
-+        MaterialTools._dispatch(
-+            material_or_function,
-+            lambda m: unreal.MaterialEditingLibrary.delete_material_expression(m, expression),
-+            lambda f: unreal.MaterialEditingLibrary.delete_material_expression_in_function(
-+                f, expression))
++        MaterialTools._delete_expression(material_or_function, expression)
 +        MaterialTools._refresh_editor(material_or_function)
 +
 +    @_tool_call
@@ -18830,7 +19007,11 @@ index 0000000..435a5fd
 +        Returns:
 +            The output pin names available on the expression.
 +        """
-+        return list(unreal.MaterialEditingLibrary.get_material_expression_output_names(expression))
++        if _has_material_api('get_material_expression_output_names'):
++            return list(
++                unreal.MaterialEditingLibrary.get_material_expression_output_names(
++                    expression))
++        return list(unreal.MaterialTools.get_expression_output_names(expression))
 +
 +    @_tool_call
 +    @staticmethod
@@ -18869,12 +19050,15 @@ index 0000000..435a5fd
 +            to_input_name: The input pin name to disconnect. Use get_expression_input_names
 +                to discover valid names. Pass an empty string to disconnect the first input.
 +        """
-+        result = unreal.MaterialEditingLibrary.disconnect_material_expressions(
-+            to_expression, to_input_name)
-+        if not result:
-+            raise ValueError(
-+                f'Failed to disconnect input "{to_input_name}" on {to_expression}. '
-+                f'The pin may not exist or may already be disconnected.')
++        if _has_material_api('disconnect_material_expressions'):
++            result = unreal.MaterialEditingLibrary.disconnect_material_expressions(
++                to_expression, to_input_name)
++            if not result:
++                raise ValueError(
++                    f'Failed to disconnect input "{to_input_name}" on {to_expression}. '
++                    f'The pin may not exist or may already be disconnected.')
++        else:
++            unreal.MaterialTools.disconnect_expressions(to_expression, to_input_name)
 +        MaterialTools._refresh_editor(to_expression.get_outer())
 +
 +    # -------------------------------------------------------------------------
@@ -18885,7 +19069,8 @@ index 0000000..435a5fd
 +    @staticmethod
 +    def get_expression_inputs(
 +            material_or_function: unreal.Object,
-+            expression: unreal.MaterialExpression) -> list[MaterialInputSource]:
++            expression: unreal.MaterialExpression
++            ) -> list[unreal.EditorToolsetMaterialInputSource]:
 +        """Returns the current wiring of each input pin on a material expression.
 +
 +        Use after building or modifying a graph to verify the wiring matches
@@ -18900,6 +19085,22 @@ index 0000000..435a5fd
 +            get_expression_input_names. The expression field is None for
 +            unwired pins.
 +        """
++        has_complete_input_api = (
++            _has_material_api('get_inputs_for_material_expression')
++            and _has_material_api('get_inputs_for_material_function_expression')
++            and _has_material_api(
++                'get_input_node_output_name_for_material_expression')
++        )
++        if not has_complete_input_api:
++            native_sources = list(unreal.MaterialTools.get_expression_inputs(
++                material_or_function, expression))
++            for source in native_sources:
++                if source.input_name == 'None':
++                    source.input_name = ''
++                if source.output_name == 'None':
++                    source.output_name = ''
++            return native_sources
++
 +        input_names = list(
 +            unreal.MaterialEditingLibrary.get_material_expression_input_names(expression))
 +        # Parallel to input_names; unwired pins come back as None.
@@ -18912,7 +19113,7 @@ index 0000000..435a5fd
 +        result = []
 +        for i, name in enumerate(input_names):
 +            src = sources[i] if i < len(sources) else None
-+            entry = MaterialInputSource()
++            entry = unreal.EditorToolsetMaterialInputSource()
 +            entry.input_name = name
 +            entry.expression = src
 +            output_name = unreal.MaterialEditingLibrary.get_input_node_output_name_for_material_expression(
@@ -18925,7 +19126,8 @@ index 0000000..435a5fd
 +    @staticmethod
 +    def get_property_input(
 +            material: unreal.Material,
-+            material_property: unreal.MaterialProperty) -> MaterialInputSource:
++            material_property: unreal.MaterialProperty
++            ) -> unreal.EditorToolsetMaterialInputSource:
 +        """Returns the expression and output pin feeding a material output property.
 +
 +        Use to inspect what drives MP_EmissiveColor, MP_Opacity, MP_BaseColor, etc.
@@ -18935,12 +19137,12 @@ index 0000000..435a5fd
 +            material_property: The material output property.
 +
 +        Returns:
-+            A MaterialInputSource with input_name empty. Its expression field is
++            An EditorToolsetMaterialInputSource with input_name empty. Its expression field is
 +            None when the output property is disconnected.
 +        """
 +        node = unreal.MaterialEditingLibrary.get_material_property_input_node(
 +            material, material_property)
-+        result = MaterialInputSource()
++        result = unreal.EditorToolsetMaterialInputSource()
 +        result.input_name = ''
 +        result.expression = node
 +        result.output_name = (
@@ -18984,12 +19186,15 @@ index 0000000..435a5fd
 +            material: The Material to modify.
 +            material_property: The material output property to disconnect.
 +        """
-+        result = unreal.MaterialEditingLibrary.disconnect_material_property(
-+            material, material_property)
-+        if not result:
-+            raise ValueError(
-+                f'Failed to disconnect material property {material_property}. '
-+                f'The property may already be disconnected.')
++        if _has_material_api('disconnect_material_property'):
++            result = unreal.MaterialEditingLibrary.disconnect_material_property(
++                material, material_property)
++            if not result:
++                raise ValueError(
++                    f'Failed to disconnect material property {material_property}. '
++                    f'The property may already be disconnected.')
++        else:
++            unreal.MaterialTools.disconnect_from_output(material, material_property)
 +        MaterialTools._refresh_editor(material)
 +
 +    @_tool_call
@@ -19005,7 +19210,10 @@ index 0000000..435a5fd
 +        Args:
 +            material: The Material to clean up.
 +        """
-+        unreal.MaterialEditingLibrary.delete_unused_expressions(material)
++        if _has_material_api('delete_unused_expressions'):
++            unreal.MaterialEditingLibrary.delete_unused_expressions(material)
++        else:
++            unreal.MaterialTools.delete_unused_expressions(material)
 +        MaterialTools._refresh_editor(material)
 +
 +    @_tool_call
@@ -19061,8 +19269,10 @@ index 0000000..435a5fd
 +        Returns:
 +            Asset data for each Material that uses this function.
 +        """
-+        return unreal.MaterialEditingLibrary.get_materials_referencing_function(
-+            material_function)
++        if _has_material_api('get_materials_referencing_function'):
++            return unreal.MaterialEditingLibrary.get_materials_referencing_function(
++                material_function)
++        return unreal.MaterialTools.get_referencing_materials(material_function)
 +
 +    # -------------------------------------------------------------------------
 +    # Private helpers
@@ -19072,7 +19282,7 @@ index 0000000..435a5fd
 +    def _execute_graph_dsl(
 +            material_or_function: unreal.Object,
 +            code: str,
-+            validation_only: bool) -> str:
++            validation_only: bool) -> dict:
 +        report = {
 +            'success': False,
 +            'validation_only': validation_only,
@@ -19097,10 +19307,10 @@ index 0000000..435a5fd
 +            MaterialTools._dispatch(material_or_function, lambda _: None, lambda _: None)
 +        except material_dsl.MaterialDSLValidationError as exc:
 +            report['errors'].extend(exc.errors)
-+            return json.dumps(report, indent=2)
++            return report
 +        except Exception as exc:
 +            report['errors'].append(str(exc))
-+            return json.dumps(report, indent=2)
++            return report
 +
 +        transaction = unreal.ScopedEditorTransaction(
 +            'Validate Material Graph DSL' if validation_only else 'Apply Material Graph DSL')
@@ -19162,7 +19372,51 @@ index 0000000..435a5fd
 +                    'The original graph also reports compile errors after rollback: '
 +                    + ' | '.join(rollback_errors))
 +
-+        return json.dumps(report, indent=2)
++        return report
++
++    @staticmethod
++    def _make_operation_report(report: dict) -> MaterialGraphOperationReport:
++        result = MaterialGraphOperationReport()
++        result.success = bool(report.get('success', False))
++        result.rolled_back = bool(report.get('rolled_back', False))
++        result.target_untouched = bool(report.get('target_untouched', False))
++        result.backup_restored = bool(report.get('backup_restored', False))
++        result.status_summary = str(
++            report.get('status_summary')
++            or ('SUCCESS' if result.success else 'FAILED'))
++
++        count_keys = (
++            'nodes_created', 'nodes_deleted', 'nodes_referenced',
++            'properties_set', 'pins_configured', 'nodes_updated',
++            'connections_created', 'connections_removed',
++            'outputs_connected', 'outputs_cleared',
++        )
++        operation_counts = {
++            key: int(report.get(key, 0))
++            for key in count_keys
++            if int(report.get(key, 0)) != 0
++        }
++
++        master_status = report.get('master_material_sync', [])
++        synced = sum(1 for entry in master_status if entry.get('sync_success'))
++        failed = len(master_status) - synced
++        if synced:
++            operation_counts['master_materials_synced'] = synced
++        if failed:
++            operation_counts['master_materials_failed'] = failed
++        result.operation_counts = operation_counts
++        result.master_material_failures = {
++            str(entry.get('master_asset', '<unknown>')): str(
++                entry.get('failure_reason')
++                or 'Master material synchronization failed without diagnostics.')
++            for entry in master_status
++            if not entry.get('sync_success')
++        }
++
++        result.compile_errors = list(report.get('compile_errors', []))
++        result.errors = list(report.get('errors', []))
++        result.warnings = list(report.get('warnings', []))
++        return result
 +
 +    @staticmethod
 +    def _sync_referencing_materials_diagnostics(
@@ -19246,6 +19500,8 @@ index 0000000..435a5fd
 +                if compile_errors:
 +                    status_entry['sync_success'] = False
 +                    status_entry['compile_errors'] = compile_errors
++                    status_entry['failure_reason'] = (
++                        'Shader compilation failed: ' + ' | '.join(compile_errors))
 +                    has_referencer_errors = True
 +                    report['warnings'].append(
 +                        f"Referencing Material '{mat_path}' reported compile errors after function update: "
@@ -19254,7 +19510,9 @@ index 0000000..435a5fd
 +                MaterialTools._refresh_editor(mat)
 +            except Exception as exc:
 +                status_entry['sync_success'] = False
-+                status_entry['warnings'].append(str(exc))
++                reason = f'{type(exc).__name__}: {exc}'
++                status_entry['failure_reason'] = reason
++                status_entry['warnings'].append(reason)
 +                has_referencer_errors = True
 +
 +            referencers_status.append(status_entry)
@@ -19309,11 +19567,9 @@ index 0000000..435a5fd
 +            return
 +
 +        non_comment_nodes = []
-+        comment_nodes = []
 +
 +        for expr in expressions:
 +            if isinstance(expr, unreal.MaterialExpressionComment):
-+                comment_nodes.append(expr)
 +                try:
 +                    text = str(expr.get_editor_property('text') or '')
 +                    color = MaterialTools._get_deterministic_comment_color(text)
@@ -19326,65 +19582,169 @@ index 0000000..435a5fd
 +        if not non_comment_nodes:
 +            return
 +
++        node_set = set(non_comment_nodes)
++        dependencies: dict[unreal.MaterialExpression, list[unreal.MaterialExpression]] = {}
++        for node in non_comment_nodes:
++            dependencies[node] = [
++                source.expression
++                for source in MaterialTools.get_expression_inputs(
++                    material_or_function, node)
++                if source.expression in node_set
++            ]
++
++        consumers: dict[unreal.MaterialExpression, list[unreal.MaterialExpression]] = {
++            node: [] for node in non_comment_nodes
++        }
++        for node, parents in dependencies.items():
++            for parent in parents:
++                consumers[parent].append(node)
++
 +        ranks: dict[unreal.MaterialExpression, int] = {}
-+        for node in non_comment_nodes:
-+            cls_name = node.get_class().get_name()
-+            if cls_name in (
-+                'MaterialExpressionFunctionInput',
-+                'MaterialExpressionTextureSample',
-+                'MaterialExpressionTextureSampleParameter2D',
-+                'MaterialExpressionScalarParameter',
-+                'MaterialExpressionVectorParameter',
-+                'MaterialExpressionConstant',
-+                'MaterialExpressionConstant3Vector'
-+            ):
-+                ranks[node] = 0
++
++        def compute_rank(node: unreal.MaterialExpression, visiting: set) -> int:
++            if node in ranks:
++                return ranks[node]
++            if node in visiting:
++                return 0
++            visiting.add(node)
++            r = 0
++            if dependencies[node]:
++                r = 1 + max(compute_rank(parent, visiting) for parent in dependencies[node])
++            visiting.remove(node)
++            ranks[node] = r
++            return r
 +
 +        for node in non_comment_nodes:
++            compute_rank(node, set())
++
++        # Smart shift for parameter/constant nodes with no inputs
++        # Place them in the column immediately preceding their earliest consumer
++        for node in non_comment_nodes:
++            if not dependencies[node] and consumers[node]:
++                min_consumer_rank = min(ranks[c] for c in consumers[node])
++                ranks[node] = max(0, min_consumer_rank - 1)
++
++        # Force output nodes to the rightmost rank
++        max_rank = max(ranks.values(), default=0)
++        for node in non_comment_nodes:
 +            cls_name = node.get_class().get_name()
-+            if cls_name in ('MaterialExpressionFunctionOutput', 'MaterialExpressionMaterialOutput'):
-+                ranks[node] = 999
-+            elif node not in ranks:
-+                ranks[node] = 1
++            if cls_name in ('MaterialExpressionFunctionOutput', 'MaterialExpressionMaterialOutput') or (not consumers[node] and dependencies[node]):
++                ranks[node] = max(ranks[node], max_rank)
 +
-+        intermediate_ranks = [r for r in ranks.values() if r != 999]
-+        max_inter = max(intermediate_ranks) if intermediate_ranks else 1
-+
-+        for node, r in list(ranks.items()):
-+            if r == 999:
-+                ranks[node] = max_inter + 1
-+
-+        rank_groups: dict[int, list[unreal.MaterialExpression]] = {}
++        # Group nodes by rank (column)
++        columns: dict[int, list[unreal.MaterialExpression]] = {}
 +        for node, r in ranks.items():
-+            rank_groups.setdefault(r, []).append(node)
++            columns.setdefault(r, []).append(node)
 +
-+        start_x = -600
-+        column_spacing = 380
-+        y_gap = 60
++        sorted_ranks = sorted(columns.keys())
 +
-+        for r_val in sorted(rank_groups.keys()):
-+            group = rank_groups[r_val]
-+            col_x = start_x + r_val * column_spacing
++        # Initialize Y positions from current editor properties or 0
++        node_y: dict[unreal.MaterialExpression, float] = {}
++        for node in non_comment_nodes:
++            try:
++                node_y[node] = float(node.get_editor_property('material_expression_editor_y'))
++            except Exception:
++                node_y[node] = 0.0
 +
-+            total_height = 0
++        row_gap = 35.0
++
++        # Multi-pass Y alignment & wire straightening
++        for sweep in range(8):
++            # Forward sweep (Left-to-Right): align nodes with input sources
++            for r in sorted_ranks:
++                group = columns[r]
++                for node in group:
++                    if dependencies[node]:
++                        # Align Y with average of input parents (straightens wires)
++                        node_y[node] = sum(node_y[p] for p in dependencies[node]) / len(dependencies[node])
++                    elif consumers[node]:
++                        node_y[node] = sum(node_y[c] for c in consumers[node]) / len(consumers[node])
++
++                # Sort column by target Y and resolve overlaps with minimal movement
++                group.sort(key=lambda n: node_y[n])
++                for i in range(len(group) - 1):
++                    n_curr = group[i]
++                    n_next = group[i + 1]
++                    _, h_curr = MaterialTools._get_node_dimensions(n_curr)
++                    min_next_y = node_y[n_curr] + h_curr + row_gap
++                    if node_y[n_next] < min_next_y:
++                        node_y[n_next] = min_next_y
++
++            # Backward sweep (Right-to-Left): align nodes with consumers
++            for r in reversed(sorted_ranks):
++                group = columns[r]
++                for node in group:
++                    if consumers[node]:
++                        # Single consumer pinning or average consumer alignment
++                        node_y[node] = sum(node_y[c] for c in consumers[node]) / len(consumers[node])
++                    elif dependencies[node]:
++                        node_y[node] = sum(node_y[p] for p in dependencies[node]) / len(dependencies[node])
++
++                # Sort column by target Y and resolve overlaps with minimal movement
++                group.sort(key=lambda n: node_y[n])
++                for i in range(len(group) - 1):
++                    n_curr = group[i]
++                    n_next = group[i + 1]
++                    _, h_curr = MaterialTools._get_node_dimensions(n_curr)
++                    min_next_y = node_y[n_curr] + h_curr + row_gap
++                    if node_y[n_next] < min_next_y:
++                        node_y[n_next] = min_next_y
++
++        # Compact column-level alignment without destroying relative pin-Y placement
++        for r in sorted_ranks:
++            group = columns[r]
++            if not group:
++                continue
++            group.sort(key=lambda n: node_y[n])
++
++            # Ensure minimum gap between adjacent nodes in column
++            for i in range(len(group) - 1):
++                n_curr = group[i]
++                n_next = group[i + 1]
++                _, h_curr = MaterialTools._get_node_dimensions(n_curr)
++                min_next_y = node_y[n_curr] + h_curr + row_gap
++                if node_y[n_next] < min_next_y:
++                    node_y[n_next] = min_next_y
++
++            # Compute column mean Y shift to center relative to connected neighbors
++            connected_y = []
++            for n in group:
++                for c in consumers[n]:
++                    connected_y.append(node_y[c])
++                for p in dependencies[n]:
++                    connected_y.append(node_y[p])
++
++            if connected_y:
++                avg_conn = sum(connected_y) / len(connected_y)
++                avg_curr = sum(node_y[n] for n in group) / len(group)
++                shift = avg_conn - avg_curr
++                for n in group:
++                    node_y[n] += shift * 0.5
++
++        # Assign X positions based on column widths with adaptive compact gaps
++        start_x = min(
++            int(node.get_editor_property('material_expression_editor_x'))
++            for node in non_comment_nodes)
++        current_x = start_x
++
++        for r in sorted_ranks:
++            group = columns[r]
++            col_width = 0
 +            for node in group:
-+                _, h = MaterialTools._get_node_dimensions(node)
-+                total_height += h + y_gap
-+            total_height -= y_gap
++                width, height = MaterialTools._get_node_dimensions(node)
++                node.set_editor_property('material_expression_editor_x', int(current_x))
++                node.set_editor_property('material_expression_editor_y', int(node_y[node]))
++                col_width = max(col_width, width)
 +
-+            current_y = -total_height / 2.0
-+
-+            for node in group:
-+                _, h = MaterialTools._get_node_dimensions(node)
-+                node.set_editor_property('material_expression_editor_x', int(col_x))
-+                node.set_editor_property('material_expression_editor_y', int(current_y))
-+                current_y += h + y_gap
++            # Adaptive gap: small math node chains get tight 45-50px gap, larger nodes get 70px gap
++            adaptive_gap = 45 if col_width <= 200 else 70
++            current_x += col_width + adaptive_gap
 +
 +        MaterialTools._refresh_editor(material_or_function)
 +
 +    @staticmethod
 +    def _clear_graph(material_or_function: unreal.Object, report: dict) -> None:
-+        bridge = getattr(unreal, 'MaterialCompileDiagnosticsBridge', None)
++        bridge = getattr(unreal, 'MaterialGraphDSLBridge', None)
 +        if not bridge or not hasattr(bridge, 'clear_graph'):
 +            raise RuntimeError(
 +                'Native ClearGraph bridge is unavailable. Build and restart the editor.')
@@ -19413,14 +19773,24 @@ index 0000000..435a5fd
 +                raise ValueError(
 +                    f'Node "{spec["id"]}" uses a MaterialFunction-only class: {class_path}')
 +
-+            expression = MaterialTools._dispatch(
-+                material_or_function,
-+                lambda material: unreal.MaterialEditingLibrary.create_material_expression(
-+                    material, expression_class,
-+                    node_pos_x=spec.get('x', 0), node_pos_y=spec.get('y', 0)),
-+                lambda function: unreal.MaterialEditingLibrary.create_material_expression_in_function(
-+                    function, expression_class,
-+                    node_pos_x=spec.get('x', 0), node_pos_y=spec.get('y', 0)))
++            if isinstance(
++                    unreal.get_default_object(expression_class),
++                    unreal.MaterialExpressionComment):
++                bridge = getattr(unreal, 'MaterialGraphDSLBridge', None)
++                if bridge and hasattr(bridge, 'create_material_comment'):
++                    expression = bridge.create_material_comment(
++                        material_or_function, spec.get('x', 0), spec.get('y', 0))
++                else:
++                    raise RuntimeError('Native create_material_comment bridge is unavailable.')
++            else:
++                expression = MaterialTools._dispatch(
++                    material_or_function,
++                    lambda material: unreal.MaterialEditingLibrary.create_material_expression(
++                        material, expression_class,
++                        node_pos_x=spec.get('x', 0), node_pos_y=spec.get('y', 0)),
++                    lambda function: unreal.MaterialEditingLibrary.create_material_expression_in_function(
++                        function, expression_class,
++                        node_pos_x=spec.get('x', 0), node_pos_y=spec.get('y', 0)))
 +            if not expression:
 +                raise RuntimeError(
 +                    f'Node "{spec["id"]}" could not be created from {class_path}.')
@@ -19461,7 +19831,7 @@ index 0000000..435a5fd
 +
 +    @staticmethod
 +    def _dsl_bridge():
-+        bridge = getattr(unreal, 'MaterialCompileDiagnosticsBridge', None)
++        bridge = getattr(unreal, 'MaterialGraphDSLBridge', None)
 +        if not bridge:
 +            raise RuntimeError(
 +                'Native Material DSL bridge is unavailable. Build and restart the editor.')
@@ -19506,13 +19876,7 @@ index 0000000..435a5fd
 +
 +        for target in operations['delete_nodes']:
 +            expression = MaterialTools._resolve_patch_target(references, target)
-+            MaterialTools._dispatch(
-+                material_or_function,
-+                lambda material, node=expression:
-+                    unreal.MaterialEditingLibrary.delete_material_expression(material, node),
-+                lambda function, node=expression:
-+                    unreal.MaterialEditingLibrary.delete_material_expression_in_function(
-+                        function, node))
++            MaterialTools._delete_expression(material_or_function, expression)
 +            references = {
 +                key: value for key, value in references.items() if value != expression}
 +            report['nodes_deleted'] += 1
@@ -19520,6 +19884,8 @@ index 0000000..435a5fd
 +        added: dict[str, unreal.MaterialExpression] = {}
 +        MaterialTools._resolve_dsl_nodes(
 +            material_or_function, operations['add_nodes'], added, report)
++        MaterialTools._apply_dsl_properties(
++            operations['add_nodes'], added, report)
 +        for node_id, expression in added.items():
 +            if node_id in references:
 +                raise ValueError(f'Added node id conflicts with an existing node: {node_id}')
@@ -19533,8 +19899,8 @@ index 0000000..435a5fd
 +            expression = MaterialTools._resolve_patch_target(references, update['target'])
 +            MaterialTools._configure_dsl_pins(expression, update.get('pins'), report)
 +            properties = update.get('properties', {})
-+            if properties and not unreal.ToolsetLibrary.set_object_properties(
-+                    expression, json.dumps(properties)):
++            if properties and not MaterialTools._set_expression_properties(
++                    expression, properties):
 +                raise ValueError(
 +                    f'Patch target "{update["target"]}" contains an invalid property.')
 +            report['properties_set'] += len(properties)
@@ -19542,6 +19908,8 @@ index 0000000..435a5fd
 +                expression.set_editor_property('material_expression_editor_x', update['x'])
 +            if 'y' in update:
 +                expression.set_editor_property('material_expression_editor_y', update['y'])
++            if isinstance(expression, unreal.MaterialExpressionComment):
++                MaterialTools._sync_comment(expression)
 +            report['nodes_updated'] += 1
 +
 +        for edge in operations['disconnect']:
@@ -19604,12 +19972,7 @@ index 0000000..435a5fd
 +            warnings: list[str]) -> None:
 +        for expression in reversed(list(nodes.values())):
 +            try:
-+                MaterialTools._dispatch(
-+                    material_or_function,
-+                    lambda material: unreal.MaterialEditingLibrary.delete_material_expression(
-+                        material, expression),
-+                    lambda function: unreal.MaterialEditingLibrary.delete_material_expression_in_function(
-+                        function, expression))
++                MaterialTools._delete_expression(material_or_function, expression)
 +            except Exception as exc:
 +                warnings.append(f'Rollback could not delete {expression}: {exc}')
 +
@@ -19682,18 +20045,18 @@ index 0000000..435a5fd
 +            properties = spec.get('properties', {})
 +            if not properties:
 +                continue
-+            if not unreal.ToolsetLibrary.set_object_properties(
-+                    nodes[spec['id']], json.dumps(properties)):
++            expr = nodes[spec['id']]
++            if not MaterialTools._set_expression_properties(expr, properties):
 +                raise ValueError(
 +                    f'Node "{spec["id"]}" contains an invalid property or value.')
-+            if isinstance(nodes[spec['id']], unreal.MaterialExpressionMaterialFunctionCall):
++            if isinstance(expr, unreal.MaterialExpressionMaterialFunctionCall):
 +                try:
-+                    func = nodes[spec['id']].get_editor_property('material_function')
++                    func = expr.get_editor_property('material_function')
 +                    if func:
 +                        unreal.MaterialEditingLibrary.update_material_function(func)
 +                except Exception:
 +                    pass
-+            report['properties_set'] += len(properties)
++            report['properties_set'] += len(spec.get('properties', {}))
 +
 +    @staticmethod
 +    def _apply_dsl_connections(
@@ -19760,19 +20123,63 @@ index 0000000..435a5fd
 +        return filtered_errors
 +
 +    @staticmethod
++    def _delete_expression(
++            material_or_function: unreal.Object,
++            expression: unreal.MaterialExpression) -> None:
++        if isinstance(expression, unreal.MaterialExpressionComment):
++            if not MaterialTools._dsl_bridge().delete_material_comment(
++                    material_or_function, expression):
++                raise ValueError('Material comment does not belong to the target graph.')
++            return
++        MaterialTools._dispatch(
++            material_or_function,
++            lambda material:
++                unreal.MaterialEditingLibrary.delete_material_expression(
++                    material, expression),
++            lambda function:
++                unreal.MaterialEditingLibrary.delete_material_expression_in_function(
++                    function, expression))
++
++    @staticmethod
++    def _sync_comment(expression: unreal.MaterialExpressionComment) -> None:
++        if not MaterialTools._dsl_bridge().set_material_comment_properties(
++                expression, '{}'):
++            raise ValueError('Material comment graph synchronization failed.')
++
++    @staticmethod
++    def _set_expression_properties(
++            expression: unreal.MaterialExpression,
++            properties: dict) -> bool:
++        if not isinstance(expression, unreal.MaterialExpressionComment):
++            return unreal.ToolsetLibrary.set_object_properties(
++                expression, _compact_json(properties))
++
++        special_names = {
++            'sizex', 'sizey', 'text', 'fontsize', 'commentcolor',
++        }
++        special = {}
++        reflected = {}
++        for key, value in properties.items():
++            normalized = key.lower().replace('_', '')
++            target = special if normalized in special_names else reflected
++            target[key] = value
++
++        if reflected and not unreal.ToolsetLibrary.set_object_properties(
++                expression, _compact_json(reflected)):
++            return False
++        return MaterialTools._dsl_bridge().set_material_comment_properties(
++            expression, _compact_json(special))
++
++    @staticmethod
 +    def _get_expressions(
 +            material_or_function: unreal.Object) -> list[unreal.MaterialExpression]:
-+        return list(MaterialTools._dispatch(
-+            material_or_function,
-+            unreal.MaterialEditingLibrary.get_material_expressions,
-+            unreal.MaterialEditingLibrary.get_material_function_expressions))
++        MaterialTools._dispatch(material_or_function, lambda _: None, lambda _: None)
++        bridge = MaterialTools._dsl_bridge()
++        return list(bridge.get_expressions_and_comments(material_or_function))
 +
 +    @staticmethod
 +    def _get_expression_count(material_or_function: unreal.Object) -> int:
-+        return MaterialTools._dispatch(
-+            material_or_function,
-+            unreal.MaterialEditingLibrary.get_num_material_expressions,
-+            unreal.MaterialEditingLibrary.get_num_material_expressions_in_function)
++        return len(MaterialTools._get_expressions(material_or_function))
 +
 +    @staticmethod
 +    def _rename_group(
@@ -25855,10 +26262,10 @@ index 0000000..524cf1c
 +#endif
 +}
 diff --git a/Plugins/EditorToolset/Source/EditorToolset/Private/EditorToolsetModule.cpp b/Plugins/EditorToolset/Source/EditorToolset/Private/EditorToolsetModule.cpp
-index 82eccbd..332f56e 100644
+index 82eccbd..49c986c 100644
 --- a/Plugins/EditorToolset/Source/EditorToolset/Private/EditorToolsetModule.cpp
 +++ b/Plugins/EditorToolset/Source/EditorToolset/Private/EditorToolsetModule.cpp
-@@ -1,26 +1,93 @@
+@@ -1,26 +1,90 @@
  // Copyright Epic Games, Inc. All Rights Reserved.
  
  #include "Modules/ModuleManager.h"
@@ -25872,7 +26279,6 @@ index 82eccbd..332f56e 100644
  #include "EditorAppToolset.h"
  #include "LogsToolset.h"
 +#include "MaterialInstanceTools.h"
-+#include "MaterialTools.h"
  
  #define LOCTEXT_NAMESPACE "FEditorToolsetModule"
  
@@ -25886,7 +26292,6 @@ index 82eccbd..332f56e 100644
 +		UToolsetRegistry::RegisterToolsetClass(UBlueprintTools::StaticClass());
 +		UToolsetRegistry::RegisterToolsetClass(UCurveTableTools::StaticClass());
 +		UToolsetRegistry::RegisterToolsetClass(UMaterialInstanceTools::StaticClass());
-+		UToolsetRegistry::RegisterToolsetClass(UMaterialTools::StaticClass());
 +
 +		EnginePreExitHandle = FCoreDelegates::OnEnginePreExit.AddRaw(
 +			this, &FEditorToolsetModule::HandleEnginePreExit);
@@ -25902,7 +26307,6 @@ index 82eccbd..332f56e 100644
 +
 +		HandleEnginePreExit();
 +
-+		UToolsetRegistry::UnregisterToolsetClass(UMaterialTools::StaticClass());
 +		UToolsetRegistry::UnregisterToolsetClass(UMaterialInstanceTools::StaticClass());
 +		UToolsetRegistry::UnregisterToolsetClass(UCurveTableTools::StaticClass());
 +		UToolsetRegistry::UnregisterToolsetClass(UBlueprintTools::StaticClass());
@@ -26521,10 +26925,10 @@ index 0000000..3ff58ad
 +};
 diff --git a/Plugins/EditorToolset/Source/EditorToolset/Private/MaterialTools.cpp b/Plugins/EditorToolset/Source/EditorToolset/Private/MaterialTools.cpp
 new file mode 100644
-index 0000000..c3a3f9f
+index 0000000..3787a94
 --- /dev/null
 +++ b/Plugins/EditorToolset/Source/EditorToolset/Private/MaterialTools.cpp
-@@ -0,0 +1,567 @@
+@@ -0,0 +1,572 @@
 +// Copyright Epic Games, Inc. All Rights Reserved.
 +
 +#include "MaterialTools.h"
@@ -26860,7 +27264,12 @@ index 0000000..c3a3f9f
 +	for (const FExpressionInput* Input : Expression->GetInputsView())
 +	{
 +		FEditorToolsetMaterialInputSource Source;
-+		Source.InputName = InputNames.IsValidIndex(Index) ? InputNames[Index] : Input->InputName.ToString();
++		Source.InputName =
++			InputNames.IsValidIndex(Index) ? InputNames[Index] : Input->InputName.ToString();
++		if (Source.InputName == TEXT("None"))
++		{
++			Source.InputName.Reset();
++		}
 +		Source.Expression = Input ? Input->Expression : nullptr;
 +		Source.OutputName = Source.Expression ? GetExpressionOutputName(Source.Expression, Input->OutputIndex) : TEXT("");
 +		Result.Add(Source);
@@ -27067,7 +27476,7 @@ index 0000000..c3a3f9f
 +	}
 +
 +	const TArray<FExpressionOutput>& Outputs = const_cast<UMaterialExpression*>(Expression)->GetOutputs();
-+	if (!Outputs.IsValidIndex(OutputIndex))
++	if (!Outputs.IsValidIndex(OutputIndex) || Outputs[OutputIndex].OutputName.IsNone())
 +	{
 +		return TEXT("");
 +	}
@@ -27094,7 +27503,7 @@ index 0000000..c3a3f9f
 +}
 diff --git a/Plugins/EditorToolset/Source/EditorToolset/Private/MaterialTools.h b/Plugins/EditorToolset/Source/EditorToolset/Private/MaterialTools.h
 new file mode 100644
-index 0000000..13c0664
+index 0000000..12864fa
 --- /dev/null
 +++ b/Plugins/EditorToolset/Source/EditorToolset/Private/MaterialTools.h
 @@ -0,0 +1,119 @@
@@ -27103,8 +27512,8 @@ index 0000000..13c0664
 +#pragma once
 +
 +#include "CoreMinimal.h"
++#include "Kismet/BlueprintFunctionLibrary.h"
 +#include "SceneTypes.h"
-+#include "ToolsetRegistry/ToolsetDefinition.h"
 +#include "MaterialTools.generated.h"
 +
 +class UMaterial;
@@ -27130,83 +27539,83 @@ index 0000000..13c0664
 +};
 +
 +UCLASS()
-+class UMaterialTools : public UToolsetDefinition
++class UMaterialTools : public UBlueprintFunctionLibrary
 +{
 +	GENERATED_BODY()
 +
 +public:
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static UMaterial* CreateMaterial(const FString& FolderPath, const FString& AssetName);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static UMaterialFunction* CreateFunction(const FString& FolderPath, const FString& AssetName);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static UMaterialParameterCollection* CreateParameterCollection(const FString& FolderPath, const FString& AssetName);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static TArray<FSoftClassPath> ListExpressionClasses(UObject* MaterialOrFunction, const FString& Search = TEXT(""));
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static UMaterialExpression* AddExpression(
 +		UObject* MaterialOrFunction,
 +		TSubclassOf<UMaterialExpression> ExpressionClass,
 +		int32 X = 0,
 +		int32 Y = 0);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static void DeleteExpression(UObject* MaterialOrFunction, UMaterialExpression* Expression);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static TArray<UMaterialExpression*> GetExpressions(UObject* MaterialOrFunction);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static void LayoutExpressions(UObject* MaterialOrFunction);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static TArray<FString> ListParameterGroups(UObject* MaterialOrFunction);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static void RenameParameterGroup(UObject* MaterialOrFunction, const FString& OldName, const FString& NewName);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static void DeleteParameterGroup(UObject* MaterialOrFunction, const FString& GroupName);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static TArray<FString> GetExpressionInputNames(UMaterialExpression* Expression);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static TArray<FString> GetExpressionOutputNames(UMaterialExpression* Expression);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static void ConnectExpressions(
 +		UMaterialExpression* FromExpression,
 +		const FString& FromOutputName,
 +		UMaterialExpression* ToExpression,
 +		const FString& ToInputName);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static void DisconnectExpressions(UMaterialExpression* ToExpression, const FString& ToInputName);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static TArray<FEditorToolsetMaterialInputSource> GetExpressionInputs(UObject* MaterialOrFunction, UMaterialExpression* Expression);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static FEditorToolsetMaterialInputSource GetPropertyInput(UMaterial* Material, EMaterialProperty MaterialProperty);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static void ConnectToOutput(UMaterialExpression* Expression, const FString& OutputName, EMaterialProperty MaterialProperty);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static void DisconnectFromOutput(UMaterial* Material, EMaterialProperty MaterialProperty);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static void DeleteUnusedExpressions(UMaterial* Material);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static void Recompile(UObject* MaterialOrFunction);
 +
-+	UFUNCTION(meta = (AICallable), Category = "MaterialTools")
++	UFUNCTION(BlueprintCallable, Category = "MaterialTools")
 +	static TArray<FAssetData> GetReferencingMaterials(UMaterialFunction* MaterialFunction);
 +
 +private:
@@ -38008,6 +38417,79 @@ index 7326515..540ea27 100644
  
  #include "ModelContextProtocolEditorToolLibrary.h"
  #include "ModelContextProtocolToolLibrary.h"
+diff --git a/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditor/Private/ModelContextProtocolToolsetRegistryAdapter.cpp b/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditor/Private/ModelContextProtocolToolsetRegistryAdapter.cpp
+index 1d7016f..47c7886 100644
+--- a/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditor/Private/ModelContextProtocolToolsetRegistryAdapter.cpp
++++ b/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditor/Private/ModelContextProtocolToolsetRegistryAdapter.cpp
+@@ -24,6 +24,48 @@ namespace UE::ModelContextProtocol::Private
+ 			GEditor->GetEditorSubsystem<UToolsetRegistrySubsystem>() : nullptr;
+ 		return Subsystem ? &Subsystem->ToolsetRegistry : nullptr;
+ 	}
++
++	FModelContextProtocolToolResult MakeToolsetResult(const FString& Json)
++	{
++		TSharedPtr<FJsonValue> StructuredContent;
++		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
++		if (!FJsonSerializer::Deserialize(Reader, StructuredContent) ||
++			!StructuredContent.IsValid())
++		{
++			return MakeErrorResult(TEXT("ToolsetRegistry returned invalid JSON."));
++		}
++
++		const TSharedPtr<FJsonObject>* Object = nullptr;
++		bool bNormalizedNestedJson = false;
++		if (StructuredContent->TryGetObject(Object) && Object)
++		{
++			FString NestedJson;
++			if ((*Object)->TryGetStringField(TEXT("returnValue"), NestedJson) &&
++				(NestedJson.StartsWith(TEXT("{")) || NestedJson.StartsWith(TEXT("["))))
++			{
++				TSharedPtr<FJsonValue> NestedValue;
++				TSharedRef<TJsonReader<>> NestedReader =
++					TJsonReaderFactory<>::Create(NestedJson);
++				if (FJsonSerializer::Deserialize(NestedReader, NestedValue) &&
++					NestedValue.IsValid())
++				{
++					TSharedPtr<FJsonObject> Normalized = MakeShared<FJsonObject>();
++					Normalized->Values = (*Object)->Values;
++					Normalized->SetField(TEXT("returnValue"), NestedValue);
++					StructuredContent = MakeShared<FJsonValueObject>(Normalized);
++					bNormalizedNestedJson = true;
++				}
++			}
++		}
++
++		FModelContextProtocolToolResult Result =
++			MakeStructuredContentResult(StructuredContent);
++		if (bNormalizedNestedJson && Result.JsonObject.IsValid())
++		{
++			Result.JsonObject->RemoveField(TEXT("content"));
++		}
++		return Result;
++	}
+ }
+ 
+ FToolsetRegistryToolAdapter::FToolsetRegistryToolAdapter(const FString& InToolName, const FString& InDescription, TSharedPtr<FJsonObject> InInputSchema)
+@@ -73,7 +115,8 @@ void FToolsetRegistryToolAdapter::RunAsync(const FModelContextProtocolToolReques
+ 		}
+ 		else
+ 		{
+-			OnComplete(UE::ModelContextProtocol::MakeTextResult(Result.GetValue()));
++			OnComplete(UE::ModelContextProtocol::Private::MakeToolsetResult(
++				Result.GetValue()));
+ 		}
+ 	});
+ }
+@@ -264,7 +307,8 @@ void FToolsetRegistryToolAdapterManager::DispatchToolCall(const FString& Toolset
+ 			}
+ 			else
+ 			{
+-				OnComplete(UE::ModelContextProtocol::MakeTextResult(Result.GetValue()));
++				OnComplete(UE::ModelContextProtocol::Private::MakeToolsetResult(
++					Result.GetValue()));
+ 			}
+ 		});
+ 		return;
 diff --git a/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditor/Public/ModelContextProtocolAssetDefinitions.h b/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditor/Public/ModelContextProtocolAssetDefinitions.h
 index 6345902..23c003e 100644
 --- a/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditor/Public/ModelContextProtocolAssetDefinitions.h
@@ -38088,6 +38570,97 @@ index 1281c35..f5dff71 100644
  UCLASS(MinimalAPI)
  class UModelContextProtocolEditorToolLibraryBlueprint : public UEditorUtilityBlueprint
  {
+diff --git a/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditorTests/Private/Mocks/MockToolsetDefinition.cpp b/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditorTests/Private/Mocks/MockToolsetDefinition.cpp
+index 7e81153..272bfc9 100644
+--- a/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditorTests/Private/Mocks/MockToolsetDefinition.cpp
++++ b/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditorTests/Private/Mocks/MockToolsetDefinition.cpp
+@@ -13,3 +13,8 @@ int32 UMockToolsetDefinition::Add(int32 A, int32 B)
+ {
+ 	return A + B;
+ }
++
++FString UMockToolsetDefinition::JsonDocument()
++{
++	return TEXT("{\"version\":3,\"nodes\":[]}");
++}
+diff --git a/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditorTests/Private/Mocks/MockToolsetDefinition.h b/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditorTests/Private/Mocks/MockToolsetDefinition.h
+index 2f5a9c3..09209a4 100644
+--- a/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditorTests/Private/Mocks/MockToolsetDefinition.h
++++ b/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditorTests/Private/Mocks/MockToolsetDefinition.h
+@@ -22,4 +22,8 @@ public:
+ 	/** Adds two numbers together */
+ 	UFUNCTION(meta = (AICallable))
+ 	static int32 Add(int32 A, int32 B);
++
++	/** Returns a JSON document as a string */
++	UFUNCTION(meta = (AICallable))
++	static FString JsonDocument();
+ };
+diff --git a/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditorTests/Private/Tests/ModelContextProtocolToolsetRegistryTests.cpp b/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditorTests/Private/Tests/ModelContextProtocolToolsetRegistryTests.cpp
+index 6dc24c4..4b610da 100644
+--- a/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditorTests/Private/Tests/ModelContextProtocolToolsetRegistryTests.cpp
++++ b/Plugins/ModelContextProtocol/Source/ModelContextProtocolEditorTests/Private/Tests/ModelContextProtocolToolsetRegistryTests.cpp
+@@ -27,6 +27,7 @@ static const FString MockToolsetName = TEXT("ModelContextProtocolEditorTests.Moc
+ static const FString GreetToolName = MockToolsetName + TEXT(".Greet");
+ static const FString AddToolName = MockToolsetName + TEXT(".Add");
+ static const FString GreetBareName = TEXT("Greet");
++static const FString JsonDocumentBareName = TEXT("JsonDocument");
+ static const FString ListToolsetsToolName = UE::ModelContextProtocol::ListToolsetsName;
+ static const FString DescribeToolsetToolName = UE::ModelContextProtocol::DescribeToolsetName;
+ static const FString CallToolToolName = UE::ModelContextProtocol::CallToolName;
+@@ -637,6 +638,52 @@ void FModelContextProtocolToolsetRegistryTests::Define()
+ 			}));
+ 		});
+ 
++		LatentIt("should return structured content without nested JSON strings", [this](const FDoneDelegate& Done)
++		{
++			InitializeSession(FDoneDelegate::CreateLambda([this, Done]()
++			{
++				if (SessionId.IsEmpty())
++				{
++					Done.Execute();
++					return;
++				}
++
++				TSharedRef<FJsonObject> CallParams = MakeExecuteToolCallParams(
++					MockToolsetName, JsonDocumentBareName, nullptr);
++				TSharedRef<FJsonObject> CallRequest = MakeJsonRpcRequest(
++					TEXT("tools/call"), MakeShared<FJsonValueNumber>(28), CallParams);
++				SendJsonRpcRequest(CallRequest,
++					[this, Done](FHttpResponsePtr Response, bool)
++					{
++						if (TestTrue("Should have response", Response.IsValid()))
++						{
++							TSharedPtr<FJsonObject> JsonResponse =
++								ParseSseJsonResponse(Response);
++							const TSharedPtr<FJsonObject>* ResultObject = nullptr;
++							const TSharedPtr<FJsonObject>* StructuredContent = nullptr;
++							const TSharedPtr<FJsonObject>* ReturnValue = nullptr;
++							if (TestTrue("Should parse response", JsonResponse.IsValid()) &&
++								TestTrue("Should have result",
++									JsonResponse->TryGetObjectField(
++										TEXT("result"), ResultObject)) &&
++								TestTrue("Should have structured content",
++									(*ResultObject)->TryGetObjectField(
++										TEXT("structuredContent"), StructuredContent)) &&
++								TestTrue("JSON returnValue should be an object",
++									(*StructuredContent)->TryGetObjectField(
++										TEXT("returnValue"), ReturnValue)))
++							{
++								TestEqual("Nested JSON version should remain numeric",
++									(*ReturnValue)->GetIntegerField(TEXT("version")), 3);
++								TestFalse("Nested JSON should not be duplicated as text",
++									(*ResultObject)->HasField(TEXT("content")));
++							}
++						}
++						CleanupSession(Done);
++					}, SessionId, 2.0f);
++			}));
++		});
++
+ 		LatentIt("should dispatch a top-level tool through call_tool (no toolset_name)", [this](const FDoneDelegate& Done)
+ 		{
+ 			InitializeSession(FDoneDelegate::CreateLambda([this, Done]()
 diff --git a/Plugins/ModelContextProtocol/Source/ModelContextProtocolEngine/Private/ModelContextProtocolEngineModule.cpp b/Plugins/ModelContextProtocol/Source/ModelContextProtocolEngine/Private/ModelContextProtocolEngineModule.cpp
 index 17648b8..6871df4 100644
 --- a/Plugins/ModelContextProtocol/Source/ModelContextProtocolEngine/Private/ModelContextProtocolEngineModule.cpp
