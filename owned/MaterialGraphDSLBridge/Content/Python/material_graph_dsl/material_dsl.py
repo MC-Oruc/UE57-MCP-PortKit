@@ -52,6 +52,29 @@ Material Graph DSL is a strict JSON document. Unknown fields are errors.
   "layout": false
 }
 
+Patch example:
+
+{
+  "version": 3,
+  "mode": "patch",
+  "operations": {
+    "add_nodes": [
+      {
+        "id": "comment",
+        "class": "MaterialExpressionComment",
+        "x": 0,
+        "y": 0,
+        "properties": {"Text": "GRAPH SECTION", "SizeX": 400, "SizeY": 180}
+      }
+    ]
+  }
+}
+
+Patch operation keys:
+* add_nodes, update_nodes, delete_nodes
+* connect, disconnect
+* set_outputs, clear_outputs
+
 Node rules:
 * id is required and must be unique.
 * guid is the stable machine identity used by patch mode.
@@ -170,14 +193,22 @@ def parse(code: str) -> dict:
 
 
 def _parse_patch(document: dict, errors: list[str]) -> dict:
-    _reject_unknown(document, _PATCH_ROOT_KEYS, 'root', errors)
+    if 'nodes' in document:
+        errors.append(
+            'root.nodes is replace-only; patch additions belong in '
+            'root.operations.add_nodes.')
+    _reject_unknown(
+        {key: value for key, value in document.items() if key != 'nodes'},
+        _PATCH_ROOT_KEYS, 'root', errors)
     layout = document.get('layout', False)
     if not isinstance(layout, bool):
         errors.append('root.layout must be a boolean.')
 
     operations = document.get('operations')
     if not isinstance(operations, dict):
-        errors.append('root.operations must be an object.')
+        errors.append(
+            'root.operations must be an object, for example '
+            '{"add_nodes":[...]}.')
         operations = {}
     _reject_unknown(operations, _OPERATIONS_KEYS, 'operations', errors)
 

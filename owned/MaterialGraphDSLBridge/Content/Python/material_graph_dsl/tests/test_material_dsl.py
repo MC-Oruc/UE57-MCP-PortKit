@@ -74,6 +74,25 @@ class MaterialDSLParserTests(unittest.TestCase):
             'root.operations must contain at least one operation.',
             context.exception.errors)
 
+    def test_patch_nodes_error_identifies_add_nodes_location(self):
+        with self.assertRaises(material_dsl.MaterialDSLValidationError) as context:
+            material_dsl.parse(json.dumps({
+                'version': 3,
+                'mode': 'patch',
+                'nodes': [{
+                    'id': 'comment',
+                    'class': 'MaterialExpressionComment',
+                }],
+            }))
+        self.assertIn(
+            'root.nodes is replace-only; patch additions belong in '
+            'root.operations.add_nodes.',
+            context.exception.errors)
+
+    def test_usage_contains_complete_patch_example(self):
+        self.assertIn('"mode": "patch"', material_dsl.USAGE)
+        self.assertIn('"add_nodes": [', material_dsl.USAGE)
+
     def test_reports_json_line_and_column(self):
         with self.assertRaises(material_dsl.MaterialDSLValidationError) as context:
             material_dsl.parse('{\n  "version": 3,\n  broken\n}')
