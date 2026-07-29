@@ -7685,10 +7685,10 @@ index 0000000..df5cbe8
 +                    unreal.AttributeMetaData.static_struct())
 diff --git a/Plugins/EditorToolset/Content/Python/editor_toolset/tests/test_material.py b/Plugins/EditorToolset/Content/Python/editor_toolset/tests/test_material.py
 new file mode 100644
-index 0000000..2d9856a
+index 0000000..c8be3db
 --- /dev/null
 +++ b/Plugins/EditorToolset/Content/Python/editor_toolset/tests/test_material.py
-@@ -0,0 +1,799 @@
+@@ -0,0 +1,810 @@
 +# Copyright Epic Games, Inc. All Rights Reserved.
 +
 +from contextlib import ExitStack
@@ -8214,6 +8214,17 @@ index 0000000..2d9856a
 +        """Ensures that calling on an empty graph does not raise."""
 +        MaterialTools.delete_unused_expressions(self.mat)
 +        self.assertEqual(MaterialTools.get_expressions(self.mat), [])
++
++    def test_get_statistics(self):
++        """Ensures compiled statistics are returned through MaterialEditingLibrary."""
++        expected = object()
++        with patch.object(
++                unreal.MaterialEditingLibrary,
++                'get_statistics',
++                return_value=expected) as get_statistics:
++            result = MaterialTools.get_statistics(self.mat)
++        self.assertIs(result, expected)
++        get_statistics.assert_called_once_with(self.mat)
 +
 +    def test_recompile(self):
 +        """Ensures that recompile flushes expression property changes into the material's cache."""
@@ -18534,10 +18545,10 @@ index 0000000..e715ef4
 +        return data_table.fill_from_json_string(json.dumps(rows), data_table.get_row_struct())
 diff --git a/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py b/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py
 new file mode 100644
-index 0000000..8b2c915
+index 0000000..3dd01d4
 --- /dev/null
 +++ b/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py
-@@ -0,0 +1,1756 @@
+@@ -0,0 +1,1766 @@
 +# Copyright Epic Games, Inc. All Rights Reserved.
 +
 +from __future__ import annotations
@@ -19297,6 +19308,16 @@ index 0000000..8b2c915
 +            material_or_function: The Material or MaterialFunction target.
 +        """
 +        MaterialTools._smart_layout_graph(material_or_function)
++
++    @_tool_call
++    @staticmethod
++    def get_statistics(material: unreal.MaterialInterface) -> unreal.MaterialStatistics:
++        """Returns compiled shader instruction, sampler and texture-sample counts.
++
++        Statistics use the editor's current shader platform and material quality level.
++        The first call may wait for pending shader compilation to finish.
++        """
++        return unreal.MaterialEditingLibrary.get_statistics(material)
 +
 +    @_tool_call
 +    @staticmethod
