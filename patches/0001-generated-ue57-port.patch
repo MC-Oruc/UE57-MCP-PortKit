@@ -7685,14 +7685,15 @@ index 0000000..df5cbe8
 +                    unreal.AttributeMetaData.static_struct())
 diff --git a/Plugins/EditorToolset/Content/Python/editor_toolset/tests/test_material.py b/Plugins/EditorToolset/Content/Python/editor_toolset/tests/test_material.py
 new file mode 100644
-index 0000000..89e067a
+index 0000000..2d9856a
 --- /dev/null
 +++ b/Plugins/EditorToolset/Content/Python/editor_toolset/tests/test_material.py
-@@ -0,0 +1,764 @@
+@@ -0,0 +1,799 @@
 +# Copyright Epic Games, Inc. All Rights Reserved.
 +
 +from contextlib import ExitStack
 +import json
++from unittest.mock import patch
 +
 +import unreal
 +
@@ -7812,21 +7813,55 @@ index 0000000..89e067a
 +    def test_apply_graph_dsl_compile_error_reports_and_rolls_back(self):
 +        """Ensures invalid shader graphs return diagnostics and leave no partial nodes."""
 +        count_before = MaterialTools._get_expression_count(self.mat)
-+        report = MaterialTools.apply_graph_dsl(self.mat, json.dumps({
-+            'version': 3,
-+            'mode': 'replace',
-+            'nodes': [{
-+                'id': 'missing_texture',
-+                'class': 'MaterialExpressionTextureSample',
-+            }],
-+            'outputs': [{
-+                'from': 'missing_texture', 'output': 'RGB', 'property': 'MP_BASE_COLOR',
-+            }],
-+        }))
++        with patch.object(
++                unreal.EditorAssetLibrary, 'save_asset', return_value=True) as save_asset:
++            report = MaterialTools.apply_graph_dsl(self.mat, json.dumps({
++                'version': 3,
++                'mode': 'replace',
++                'nodes': [{
++                    'id': 'missing_texture',
++                    'class': 'MaterialExpressionTextureSample',
++                }],
++                'outputs': [{
++                    'from': 'missing_texture', 'output': 'RGB', 'property': 'MP_BASE_COLOR',
++                }],
++            }))
 +        self.assertFalse(report.success)
 +        self.assertTrue(report.rolled_back)
 +        self.assertGreater(len(report.compile_errors), 0)
 +        self.assertEqual(MaterialTools._get_expression_count(self.mat), count_before)
++        save_asset.assert_not_called()
++
++    def test_apply_graph_dsl_saves_success_by_default_and_supports_opt_out(self):
++        """Ensures successful applies save once unless explicitly disabled."""
++        document = json.dumps({
++            'version': 3,
++            'mode': 'replace',
++            'nodes': [{
++                'id': 'roughness',
++                'class': 'MaterialExpressionConstant',
++                'properties': {'r': 0.25},
++            }],
++            'outputs': [{
++                'from': 'roughness', 'output': '', 'property': 'MP_ROUGHNESS',
++            }],
++        })
++        expected_path = self.mat.get_path_name().split('.')[0]
++
++        with patch.object(
++                unreal.EditorAssetLibrary, 'save_asset', return_value=True) as save_asset:
++            report = MaterialTools.apply_graph_dsl(self.mat, document)
++            self.assertTrue(report.success)
++            self.assertEqual(report.operation_counts['assets_saved'], 1)
++            save_asset.assert_called_once_with(expected_path)
++
++        with patch.object(
++                unreal.EditorAssetLibrary, 'save_asset', return_value=True) as save_asset:
++            report = MaterialTools.apply_graph_dsl(
++                self.mat, document, save_on_success=False)
++            self.assertTrue(report.success)
++            self.assertNotIn('assets_saved', report.operation_counts)
++            save_asset.assert_not_called()
 +
 +    def test_operation_report_exposes_failed_master_path_and_reason(self):
 +        """Ensures downstream Material failures remain actionable in the compact report."""
@@ -18499,10 +18534,10 @@ index 0000000..e715ef4
 +        return data_table.fill_from_json_string(json.dumps(rows), data_table.get_row_struct())
 diff --git a/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py b/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py
 new file mode 100644
-index 0000000..966f424
+index 0000000..8b2c915
 --- /dev/null
 +++ b/Plugins/EditorToolset/Content/Python/editor_toolset/toolsets/material.py
-@@ -0,0 +1,1719 @@
+@@ -0,0 +1,1756 @@
 +# Copyright Epic Games, Inc. All Rights Reserved.
 +
 +from __future__ import annotations
@@ -18745,24 +18780,30 @@ index 0000000..966f424
 +    @staticmethod
 +    def apply_graph_dsl(
 +            material_or_function: unreal.Object,
-+            code: str) -> MaterialGraphOperationReport:
++            code: str,
++            save_on_success: bool = True) -> MaterialGraphOperationReport:
 +        """Atomically applies and compiles a Material Graph DSL document.
 +
 +        Any syntax, reference, property, pin, connection or compile failure cancels the
 +        complete editor transaction. The returned JSON always reports compile errors so
-+        callers can correct the DSL without inspecting the Output Log.
++        callers can correct the DSL without inspecting the Output Log. Successful calls
++        save the target and successfully synchronized master materials by default.
 +
 +        Args:
 +            material_or_function: Material or MaterialFunction graph to modify.
 +            code: Strict JSON Material Graph DSL document. Replace mode uses root.nodes;
 +                patch mode uses root.operations with add_nodes, update_nodes, delete_nodes,
 +                connect, disconnect, set_outputs, and clear_outputs arrays.
++            save_on_success: Saves the target and synchronized master materials after a
++                successful apply. Disable only for intentional in-memory workflows.
 +
 +        Returns:
 +            Structured report with success, rollback state, errors and non-zero counts.
 +        """
-+        return MaterialTools._make_operation_report(
-+            MaterialTools._apply_graph_dsl(material_or_function, code))
++        report = MaterialTools._apply_graph_dsl(material_or_function, code)
++        if report['success'] and save_on_success:
++            MaterialTools._save_graph_dsl_assets(material_or_function, report)
++        return MaterialTools._make_operation_report(report)
 +
 +    @staticmethod
 +    def _apply_graph_dsl(material_or_function: unreal.Object, code: str) -> dict:
@@ -18794,6 +18835,37 @@ index 0000000..966f424
 +                'CRITICAL: Graph apply failed and backup restoration also failed: '
 +                + ' | '.join(restore_report['errors'] + restore_report['compile_errors']))
 +        return report
++
++    @staticmethod
++    def _save_graph_dsl_assets(
++            material_or_function: unreal.Object,
++            report: dict) -> None:
++        asset_paths = [material_or_function.get_path_name().split('.')[0]]
++        for entry in report.get('master_material_sync', []):
++            if not entry.get('sync_success'):
++                continue
++            master_path = str(entry.get('master_asset', '')).split('.')[0]
++            if master_path and master_path not in asset_paths:
++                asset_paths.append(master_path)
++
++        failures = []
++        saved_count = 0
++        for asset_path in asset_paths:
++            try:
++                if unreal.EditorAssetLibrary.save_asset(asset_path):
++                    saved_count += 1
++                else:
++                    failures.append(f'{asset_path}: save returned false')
++            except Exception as exc:
++                failures.append(f'{asset_path}: {type(exc).__name__}: {exc}')
++
++        report['assets_saved'] = saved_count
++        if failures:
++            report['success'] = False
++            report['status_summary'] = 'PARTIAL_SUCCESS_SAVE_FAILED'
++            report['errors'].append(
++                'Graph changes were applied but automatic save failed: '
++                + ' | '.join(failures))
 +
 +    @_tool_call
 +    @staticmethod
@@ -19389,7 +19461,7 @@ index 0000000..966f424
 +            'nodes_created', 'nodes_deleted', 'nodes_referenced',
 +            'properties_set', 'pins_configured', 'nodes_updated',
 +            'connections_created', 'connections_removed',
-+            'outputs_connected', 'outputs_cleared',
++            'outputs_connected', 'outputs_cleared', 'assets_saved',
 +        )
 +        operation_counts = {
 +            key: int(report.get(key, 0))
