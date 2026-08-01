@@ -186,9 +186,6 @@
 			"enable": true
 		}
 	],
-	"disabled_plugins": [
-		"MetaHumanGenerator"
-	],
 	"generated_plugins": [
 		{
 			"name": "JsonUtilitiesEditor",
@@ -225,8 +222,7 @@
 	"expected_toolsets": {
 		"EditorToolset.BlueprintTools": 53,
 		"EditorToolset.MaterialInstanceTools": 13,
-		"EditorToolset.MaterialTools": 22,
-		"editor_toolset.toolsets.material.MaterialTools": 18,
+		"editor_toolset.toolsets.material.MaterialTools": 28,
 		"PCGToolset.PCGToolset": 30,
 		"PCGToolset.PCGSpatialToolset": 1
 	}

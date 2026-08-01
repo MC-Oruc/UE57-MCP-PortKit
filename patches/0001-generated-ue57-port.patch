@@ -1,3 +1,26 @@
+diff --git a/Plugins/AIModuleToolset/AIModuleToolset.uplugin b/Plugins/AIModuleToolset/AIModuleToolset.uplugin
+index b91e2fd..7bb5db4 100644
+--- a/Plugins/AIModuleToolset/AIModuleToolset.uplugin
++++ b/Plugins/AIModuleToolset/AIModuleToolset.uplugin
+@@ -15,14 +15,16 @@
+ 	"IsBetaVersion": false,
+ 	"IsExperimentalVersion": true,
+ 	"NoRedist": true,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Installed": false,
+ 	"Modules": [
+ 		{
+ 			"Name": "AIModuleToolset",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
 diff --git a/Plugins/AIModuleToolset/Content/Python/aimodule_toolset/__init__.py b/Plugins/AIModuleToolset/Content/Python/aimodule_toolset/__init__.py
 new file mode 100644
 index 0000000..99539ba
@@ -358,19 +381,30 @@ index 0000000..00815c3
 +    'AI.Toolsets.AIModuleToolset',
 +    unreal.PythonTestRunnerSearchOptions(root_module=tests.__name__))
 diff --git a/Plugins/AutomationTestToolset/AutomationTestToolset.uplugin b/Plugins/AutomationTestToolset/AutomationTestToolset.uplugin
-index b772f89..993c290 100644
+index b772f89..5a51f50 100644
 --- a/Plugins/AutomationTestToolset/AutomationTestToolset.uplugin
 +++ b/Plugins/AutomationTestToolset/AutomationTestToolset.uplugin
-@@ -21,12 +21,6 @@
+@@ -14,19 +14,15 @@
+ 	"IsBetaVersion": false,
+ 	"IsExperimentalVersion": true,
+ 	"Installed": false,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Modules": [
+ 		{
+ 			"Name": "AutomationTestToolset",
  			"Type": "Editor",
  			"LoadingPhase": "PostEngineInit",
- 			"TargetAllowList": ["Editor"]
+-			"TargetAllowList": ["Editor"]
 -		},
 -		{
 -			"Name": "AutomationTestToolsetTests",
 -			"Type": "Editor",
 -			"LoadingPhase": "Default",
 -			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
  		}
  	],
  	"Plugins": [
@@ -526,6 +560,29 @@ index 690a877..0000000
 -};
 -
 -IMPLEMENT_MODULE(FAutomationTestToolsetTestsModule, AutomationTestToolsetTests)
+diff --git a/Plugins/ConfigSettingsToolset/ConfigSettingsToolset.uplugin b/Plugins/ConfigSettingsToolset/ConfigSettingsToolset.uplugin
+index 9abdfef..ba4808c 100644
+--- a/Plugins/ConfigSettingsToolset/ConfigSettingsToolset.uplugin
++++ b/Plugins/ConfigSettingsToolset/ConfigSettingsToolset.uplugin
+@@ -20,7 +20,9 @@
+ 			"Name": "ConfigSettingsToolset",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": [ "Editor" ]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
+@@ -28,5 +30,6 @@
+ 			"Name": "ToolsetRegistry",
+ 			"Enabled": true
+ 		}
+-	]
++	],
++	"EnabledByDefault": true
+ }
 diff --git a/Plugins/ConfigSettingsToolset/Source/ConfigSettingsToolset/Private/ConfigSettingsToolset.cpp b/Plugins/ConfigSettingsToolset/Source/ConfigSettingsToolset/Private/ConfigSettingsToolset.cpp
 index 14ace85..2b8b2d6 100644
 --- a/Plugins/ConfigSettingsToolset/Source/ConfigSettingsToolset/Private/ConfigSettingsToolset.cpp
@@ -734,6 +791,51 @@ index 0000000..6186942
 +from conversation_toolset import toolsets
 +
 +toolsets._registration.register()
+diff --git a/Plugins/ConversationToolset/ConversationToolset.uplugin b/Plugins/ConversationToolset/ConversationToolset.uplugin
+index 914d549..078b5c2 100644
+--- a/Plugins/ConversationToolset/ConversationToolset.uplugin
++++ b/Plugins/ConversationToolset/ConversationToolset.uplugin
+@@ -16,13 +16,15 @@
+ 	"IsExperimentalVersion": true,
+ 	"NoRedist": true,
+ 	"Installed": false,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Modules": [
+ 		{
+ 			"Name": "ConversationToolset",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
+diff --git a/Plugins/DataRegistryToolset/DataRegistryToolset.uplugin b/Plugins/DataRegistryToolset/DataRegistryToolset.uplugin
+index 88b05c6..f48374f 100644
+--- a/Plugins/DataRegistryToolset/DataRegistryToolset.uplugin
++++ b/Plugins/DataRegistryToolset/DataRegistryToolset.uplugin
+@@ -15,14 +15,16 @@
+ 	"IsBetaVersion": false,
+ 	"IsExperimentalVersion": true,
+ 	"NoRedist": true,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Installed": false,
+ 	"Modules": [
+ 		{
+ 			"Name": "DataRegistryToolset",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
 diff --git a/Plugins/DataRegistryToolset/Source/DataRegistryToolset/Private/DataRegistryTools.cpp b/Plugins/DataRegistryToolset/Source/DataRegistryToolset/Private/DataRegistryTools.cpp
 index e6f38bb..cd01362 100644
 --- a/Plugins/DataRegistryToolset/Source/DataRegistryToolset/Private/DataRegistryTools.cpp
@@ -23777,10 +23879,20 @@ index 0000000..882519e
 +
 +toolsets._registration.register()
 diff --git a/Plugins/EditorToolset/EditorToolset.uplugin b/Plugins/EditorToolset/EditorToolset.uplugin
-index 9c364be..4596e75 100644
+index 9c364be..fc0605e 100644
 --- a/Plugins/EditorToolset/EditorToolset.uplugin
 +++ b/Plugins/EditorToolset/EditorToolset.uplugin
-@@ -27,6 +27,10 @@
+@@ -20,13 +20,20 @@
+ 			"Name": "EditorToolset",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": [ "Editor" ]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
  		{
  			"Name": "ToolsetRegistry",
  			"Enabled": true
@@ -23789,7 +23901,9 @@ index 9c364be..4596e75 100644
 +			"Name": "BlueprintEditorBridge",
 +			"Enabled": true
  		}
- 	]
+-	]
++	],
++	"EnabledByDefault": true
  }
 diff --git a/Plugins/EditorToolset/Source/EditorToolset/EditorToolset.Build.cs b/Plugins/EditorToolset/Source/EditorToolset/EditorToolset.Build.cs
 index 4a76afb..006607e 100644
@@ -27775,15 +27889,70 @@ index 2867780..4d75283 100644
  #include "Misc/AutomationTest.h"
  #include "Misc/CString.h"
 diff --git a/Plugins/FileSandbox/FileSandbox.uplugin b/Plugins/FileSandbox/FileSandbox.uplugin
-index e377819..aa9c548 100644
+index e377819..0ad377b 100644
 --- a/Plugins/FileSandbox/FileSandbox.uplugin
 +++ b/Plugins/FileSandbox/FileSandbox.uplugin
-@@ -27,4 +27,4 @@
- 			"LoadingPhase": "Default"
- 		}
- 	]
+@@ -1,30 +1,30 @@
+-{
+-	"FileVersion": 3,
+-	"Version": 1,
+-	"VersionName": "0.1",
+-	"FriendlyName": "File Sandbox",
+-	"Description": "Core functionality for sandboxing files in the editor.",
+-	"Category": "Developer",
+-	"CreatedBy": "Epic Games, Inc.",
+-	"CreatedByURL": "https://epicgames.com",
+-	"DocsURL": "",
+-	"MarketplaceURL": "",
+-	"SupportURL": "",
+-	"EnabledByDefault": false,
+-	"CanContainContent": false,
+-	"Hidden": true,
+-	"IsBetaVersion": true,
+-	"Installed": false,
+-	"Modules": [
+-		{
+-			"Name": "FileSandboxCore",
+-			"Type": "UncookedOnly",
+-			"LoadingPhase": "Default"
+-		},
+-		{
+-			"Name": "FileSandboxUI",
+-			"Type": "Editor",
+-			"LoadingPhase": "Default"
+-		}
+-	]
 -}
 \ No newline at end of file
++{
++	"FileVersion": 3,
++	"Version": 1,
++	"VersionName": "0.1",
++	"FriendlyName": "File Sandbox",
++	"Description": "Core functionality for sandboxing files in the editor.",
++	"Category": "Developer",
++	"CreatedBy": "Epic Games, Inc.",
++	"CreatedByURL": "https://epicgames.com",
++	"DocsURL": "",
++	"MarketplaceURL": "",
++	"SupportURL": "",
++	"EnabledByDefault": true,
++	"CanContainContent": false,
++	"Hidden": true,
++	"IsBetaVersion": true,
++	"Installed": false,
++	"Modules": [
++		{
++			"Name": "FileSandboxCore",
++			"Type": "UncookedOnly",
++			"LoadingPhase": "Default"
++		},
++		{
++			"Name": "FileSandboxUI",
++			"Type": "Editor",
++			"LoadingPhase": "Default"
++		}
++	]
 +}
 diff --git a/Plugins/FileSandbox/Source/FileSandboxCore/FileSandboxCore.Build.cs b/Plugins/FileSandbox/Source/FileSandboxCore/FileSandboxCore.Build.cs
 index 20ce0a5..fd5a2e4 100644
@@ -34376,6 +34545,28 @@ index 130c1ff..15b1dc1 100644
 -#undef UE_API
 \ No newline at end of file
 +#undef UE_API
+diff --git a/Plugins/GASToolsets/GASToolsets.uplugin b/Plugins/GASToolsets/GASToolsets.uplugin
+index bb636e9..26fe3fb 100644
+--- a/Plugins/GASToolsets/GASToolsets.uplugin
++++ b/Plugins/GASToolsets/GASToolsets.uplugin
+@@ -16,13 +16,15 @@
+ 	"IsExperimentalVersion": true,
+ 	"NoRedist": true,
+ 	"Installed": false,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Modules": [
+ 		{
+ 			"Name": "GASToolsets",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
 diff --git a/Plugins/GASToolsets/Source/GASToolsets/Private/AbilitySystemInspectorToolset.cpp b/Plugins/GASToolsets/Source/GASToolsets/Private/AbilitySystemInspectorToolset.cpp
 index bc9336e..9ff4e5f 100644
 --- a/Plugins/GASToolsets/Source/GASToolsets/Private/AbilitySystemInspectorToolset.cpp
@@ -34622,6 +34813,28 @@ index 4ee9305..98e1232 100644
  			FString::Printf(TEXT("Failed to remove gameplay cue tag '%s'."), *CueTag));
  	}
  	return bSuccess;
+diff --git a/Plugins/GameFeaturesToolset/GameFeaturesToolset.uplugin b/Plugins/GameFeaturesToolset/GameFeaturesToolset.uplugin
+index 5cdfd9d..f422339 100644
+--- a/Plugins/GameFeaturesToolset/GameFeaturesToolset.uplugin
++++ b/Plugins/GameFeaturesToolset/GameFeaturesToolset.uplugin
+@@ -7,13 +7,15 @@
+ 	"Category": "Other",
+ 	"EditorOnly": true,
+ 	"IsExperimentalVersion": true,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Modules": [
+ 		{
+ 			"Name": "GameFeaturesToolset",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
 diff --git a/Plugins/GameFeaturesToolset/Source/GameFeaturesToolset/GameFeaturesToolset.Build.cs b/Plugins/GameFeaturesToolset/Source/GameFeaturesToolset/GameFeaturesToolset.Build.cs
 index 952b50e..28e71f5 100644
 --- a/Plugins/GameFeaturesToolset/Source/GameFeaturesToolset/GameFeaturesToolset.Build.cs
@@ -35026,6 +35239,28 @@ index 3690c7d..0000000
 -}
 -
 -#endif  // WITH_DEV_AUTOMATION_TESTS
+diff --git a/Plugins/GameplayTagsToolset/GameplayTagsToolset.uplugin b/Plugins/GameplayTagsToolset/GameplayTagsToolset.uplugin
+index 771443a..9d9650b 100644
+--- a/Plugins/GameplayTagsToolset/GameplayTagsToolset.uplugin
++++ b/Plugins/GameplayTagsToolset/GameplayTagsToolset.uplugin
+@@ -8,13 +8,15 @@
+ 	"EditorOnly": true,
+ 	"IsExperimentalVersion": true,
+ 	"NoRedist": true,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Modules": [
+ 		{
+ 			"Name": "GameplayTagsToolset",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
 diff --git a/Plugins/GameplayTagsToolset/Source/GameplayTagsToolset/Private/GameplayTagsToolset/GameplayTagsToolset.cpp b/Plugins/GameplayTagsToolset/Source/GameplayTagsToolset/Private/GameplayTagsToolset/GameplayTagsToolset.cpp
 index 13c94d5..dcb51b9 100644
 --- a/Plugins/GameplayTagsToolset/Source/GameplayTagsToolset/Private/GameplayTagsToolset/GameplayTagsToolset.cpp
@@ -35151,10 +35386,10 @@ index a162910..be0c39b 100644
  };
  
 diff --git a/Plugins/JsonUtilitiesEditor/JsonUtilitiesEditor.uplugin b/Plugins/JsonUtilitiesEditor/JsonUtilitiesEditor.uplugin
-index 1fa7d2b..ce50dad 100644
+index 573e83f..01169ab 100644
 --- a/Plugins/JsonUtilitiesEditor/JsonUtilitiesEditor.uplugin
 +++ b/Plugins/JsonUtilitiesEditor/JsonUtilitiesEditor.uplugin
-@@ -1,22 +1,20 @@
+@@ -1,22 +1,22 @@
 -{
 -	"FileVersion": 3,
 -	"Version": 1,
@@ -35163,7 +35398,7 @@ index 1fa7d2b..ce50dad 100644
 -	"Description": "Generated UE 5.8 JsonUtilitiesEditor compatibility module for the MCP UE 5.7 port.",
 -	"Category": "Editor",
 -	"EditorOnly": true,
--	"EnabledByDefault": false,
+-	"EnabledByDefault": true,
 -	"CanContainContent": false,
 -	"Installed": false,
 -	"Modules": [
@@ -35185,7 +35420,7 @@ index 1fa7d2b..ce50dad 100644
 +	"Description": "UE 5.8 JsonUtilitiesEditor compatibility module for project-local toolset registry port.",
 +	"Category": "Editor",
 +	"EditorOnly": true,
-+	"EnabledByDefault": false,
++	"EnabledByDefault": true,
 +	"CanContainContent": false,
 +	"Installed": false,
 +	"Modules": [
@@ -35193,7 +35428,9 @@ index 1fa7d2b..ce50dad 100644
 +			"Name": "JsonUtilitiesEditor",
 +			"Type": "Editor",
 +			"LoadingPhase": "Default",
-+			"TargetAllowList": [ "Editor" ]
++			"TargetAllowList": [
++				"Editor"
++			]
 +		}
 +	]
 +}
@@ -37625,19 +37862,30 @@ index 22e5b96..f63dab4 100644
 +	}
  };
 diff --git a/Plugins/LiveCodingToolset/LiveCodingToolset.uplugin b/Plugins/LiveCodingToolset/LiveCodingToolset.uplugin
-index b64043e..16bc58b 100644
+index b64043e..183fe6b 100644
 --- a/Plugins/LiveCodingToolset/LiveCodingToolset.uplugin
 +++ b/Plugins/LiveCodingToolset/LiveCodingToolset.uplugin
-@@ -21,12 +21,6 @@
+@@ -14,19 +14,15 @@
+ 	"IsBetaVersion": false,
+ 	"IsExperimentalVersion": true,
+ 	"Installed": false,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Modules": [
+ 		{
+ 			"Name": "LiveCodingToolset",
  			"Type": "Editor",
  			"LoadingPhase": "PostEngineInit",
- 			"TargetAllowList": ["Editor"]
+-			"TargetAllowList": ["Editor"]
 -		},
 -		{
 -			"Name": "LiveCodingToolsetTests",
 -			"Type": "Editor",
 -			"LoadingPhase": "Default",
 -			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
  		}
  	],
  	"Plugins": [
@@ -37722,6 +37970,30 @@ index 6d03f92..0000000
 -};
 -
 -IMPLEMENT_MODULE(FLiveCodingToolsetTestsModule, LiveCodingToolsetTests)
+diff --git a/Plugins/MCPClientToolset/MCPClientToolset.uplugin b/Plugins/MCPClientToolset/MCPClientToolset.uplugin
+index 28e5f8c..1d35487 100644
+--- a/Plugins/MCPClientToolset/MCPClientToolset.uplugin
++++ b/Plugins/MCPClientToolset/MCPClientToolset.uplugin
+@@ -11,7 +11,7 @@
+ 	"MarketplaceURL": "",
+ 	"SupportURL": "",
+ 	"EditorOnly": true,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"CanContainContent": false,
+ 	"IsBetaVersion": true,
+ 	"IsExperimentalVersion": true,
+@@ -27,7 +27,9 @@
+ 			"Name": "MCPClientToolset",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": [ "Editor" ]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	]
+ }
 diff --git a/Plugins/MCPClientToolset/Source/MCPClientToolset/Private/MCPClientToolset/Module.h b/Plugins/MCPClientToolset/Source/MCPClientToolset/Private/MCPClientToolset/Module.h
 index f5fce5d..7e63cd4 100644
 --- a/Plugins/MCPClientToolset/Source/MCPClientToolset/Private/MCPClientToolset/Module.h
@@ -37742,13 +38014,43 @@ index f5fce5d..7e63cd4 100644
  
  class FMCPClientToolsetModule : public IModuleInterface
 diff --git a/Plugins/ModelContextProtocol/ModelContextProtocol.uplugin b/Plugins/ModelContextProtocol/ModelContextProtocol.uplugin
-index 1b90b7d..e09ffac 100644
+index 1b90b7d..e846ce0 100644
 --- a/Plugins/ModelContextProtocol/ModelContextProtocol.uplugin
 +++ b/Plugins/ModelContextProtocol/ModelContextProtocol.uplugin
-@@ -31,21 +31,6 @@
- 			"Name": "ModelContextProtocolEditor",
- 			"Type": "Editor",
- 			"LoadingPhase": "Default"
+@@ -1,61 +1,50 @@
+-{
+-	"FileVersion": 3,
+-	"Version": 1,
+-	"VersionName": "1.0",
+-	"FriendlyName": "Unreal MCP",
+-	"Description": "Anthropic MCP (Model Context Protocol) server implementation for Unreal Engine.",
+-	"Category": "Other",
+-	"NoRedist": true,
+-	"CreatedBy": "Epic Games, Inc.",
+-	"CreatedByURL": "",
+-	"DocsURL": "",
+-	"MarketplaceURL": "",
+-	"SupportURL": "",
+-	"CanContainContent": false,
+-	"IsBetaVersion": false,
+-	"IsExperimentalVersion": true,
+-	"Installed": false,
+-	"EnabledByDefault": false,
+-	"Modules": [
+-		{
+-			"Name": "ModelContextProtocol",
+-			"Type": "Runtime",
+-			"LoadingPhase": "Default"
+-		},
+-		{
+-			"Name": "ModelContextProtocolEngine",
+-			"Type": "Runtime",
+-			"LoadingPhase": "Default"
+-		},
+-		{
+-			"Name": "ModelContextProtocolEditor",
+-			"Type": "Editor",
+-			"LoadingPhase": "Default"
 -		},
 -		{
 -			"Name": "ModelContextProtocolTests",
@@ -37764,21 +38066,69 @@ index 1b90b7d..e09ffac 100644
 -			"Name": "ModelContextProtocolEditorTests",
 -			"Type": "Editor",
 -			"LoadingPhase": "Default"
- 		}
- 	],
- 	"Plugins": [
-@@ -56,6 +41,10 @@
- 		{
- 			"Name": "ToolsetRegistry",
- 			"Enabled": true
+-		}
+-	],
+-	"Plugins": [
+-		{
+-			"Name": "EngineAssetDefinitions",
+-			"Enabled": true
+-		},
+-		{
+-			"Name": "ToolsetRegistry",
+-			"Enabled": true
+-		}
+-	]
+-}
+\ No newline at end of file
++{
++	"FileVersion": 3,
++	"Version": 1,
++	"VersionName": "1.0",
++	"FriendlyName": "Unreal MCP",
++	"Description": "Anthropic MCP (Model Context Protocol) server implementation for Unreal Engine.",
++	"Category": "Other",
++	"NoRedist": true,
++	"CreatedBy": "Epic Games, Inc.",
++	"CreatedByURL": "",
++	"DocsURL": "",
++	"MarketplaceURL": "",
++	"SupportURL": "",
++	"CanContainContent": false,
++	"IsBetaVersion": false,
++	"IsExperimentalVersion": true,
++	"Installed": false,
++	"EnabledByDefault": true,
++	"Modules": [
++		{
++			"Name": "ModelContextProtocol",
++			"Type": "Runtime",
++			"LoadingPhase": "Default"
++		},
++		{
++			"Name": "ModelContextProtocolEngine",
++			"Type": "Runtime",
++			"LoadingPhase": "Default"
++		},
++		{
++			"Name": "ModelContextProtocolEditor",
++			"Type": "Editor",
++			"LoadingPhase": "Default"
++		}
++	],
++	"Plugins": [
++		{
++			"Name": "EngineAssetDefinitions",
++			"Enabled": true
++		},
++		{
++			"Name": "ToolsetRegistry",
++			"Enabled": true
 +		},
 +		{
 +			"Name": "JsonUtilitiesEditor",
 +			"Enabled": true
- 		}
- 	]
--}
-\ No newline at end of file
++		}
++	]
 +}
 diff --git a/Plugins/ModelContextProtocol/Source/ModelContextProtocol/Private/IModelContextProtocolResourceProvider.cpp b/Plugins/ModelContextProtocol/Source/ModelContextProtocol/Private/IModelContextProtocolResourceProvider.cpp
 index 4a8233e..a0cd33d 100644
@@ -39392,10 +39742,30 @@ index 0000000..c8764e1
 +    instructions = _INSTRUCTIONS
 +    toolsets = [unreal.NiagaraToolset_Info, unreal.NiagaraToolset_Component, unreal.NiagaraToolset_Assets]
 diff --git a/Plugins/NiagaraToolsets/NiagaraToolsets.uplugin b/Plugins/NiagaraToolsets/NiagaraToolsets.uplugin
-index e290692..bdfecbd 100644
+index e290692..55a567e 100644
 --- a/Plugins/NiagaraToolsets/NiagaraToolsets.uplugin
 +++ b/Plugins/NiagaraToolsets/NiagaraToolsets.uplugin
-@@ -34,4 +34,4 @@
+@@ -11,7 +11,7 @@
+ 	"MarketplaceURL": "",
+ 	"SupportURL": "",
+ 	"EditorOnly": true,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"CanContainContent": true,
+ 	"IsBetaVersion": false,
+ 	"IsExperimentalVersion": true,
+@@ -21,7 +21,9 @@
+ 			"Name": "NiagaraToolsets",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
+@@ -34,4 +36,4 @@
  			"Enabled": true
  		}
  	]
@@ -42408,10 +42778,30 @@ index 1e0b8f0..c2e4da3 100644
  }
 -
 diff --git a/Plugins/PCGToolset/PCGToolset.uplugin b/Plugins/PCGToolset/PCGToolset.uplugin
-index 0e6a05a..a63ef19 100644
+index 0e6a05a..fd094b9 100644
 --- a/Plugins/PCGToolset/PCGToolset.uplugin
 +++ b/Plugins/PCGToolset/PCGToolset.uplugin
-@@ -34,4 +34,4 @@
+@@ -11,7 +11,7 @@
+ 	"MarketplaceURL": "",
+ 	"SupportURL": "",
+ 	"EditorOnly": true,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"CanContainContent": true,
+ 	"IsBetaVersion": false,
+ 	"IsExperimentalVersion": true,
+@@ -21,7 +21,9 @@
+ 			"Name": "PCGToolset",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
+@@ -34,4 +36,4 @@
  			"Enabled": true
  		}
  	]
@@ -43800,6 +44190,28 @@ index 3accda8..4e87b41 100644
  
  #pragma once
  #include "PCGToolset.h"
+diff --git a/Plugins/PhysicsToolsets/PhysicsToolsets.uplugin b/Plugins/PhysicsToolsets/PhysicsToolsets.uplugin
+index 08bbe59..6cc742b 100644
+--- a/Plugins/PhysicsToolsets/PhysicsToolsets.uplugin
++++ b/Plugins/PhysicsToolsets/PhysicsToolsets.uplugin
+@@ -16,13 +16,15 @@
+ 	"IsExperimentalVersion": true,
+ 	"NoRedist": true,
+ 	"Installed": false,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Modules": [
+ 		{
+ 			"Name": "PhysicsToolsets",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
 diff --git a/Plugins/PhysicsToolsets/Source/PhysicsToolsets/Private/PhysicsToolsets/PhysicsAssetToolset.cpp b/Plugins/PhysicsToolsets/Source/PhysicsToolsets/Private/PhysicsToolsets/PhysicsAssetToolset.cpp
 index 36f7107..acd3cad 100644
 --- a/Plugins/PhysicsToolsets/Source/PhysicsToolsets/Private/PhysicsToolsets/PhysicsAssetToolset.cpp
@@ -44151,15 +44563,29 @@ index 36f7107..acd3cad 100644
  		return nullptr;
  	}
 diff --git a/Plugins/PluginToolset/PluginToolset.uplugin b/Plugins/PluginToolset/PluginToolset.uplugin
-index 224c2c4..47f2554 100644
+index 224c2c4..e62cc30 100644
 --- a/Plugins/PluginToolset/PluginToolset.uplugin
 +++ b/Plugins/PluginToolset/PluginToolset.uplugin
-@@ -33,4 +33,4 @@
+@@ -20,7 +20,9 @@
+ 			"Name": "PluginToolset",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": [ "Editor" ]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
+@@ -32,5 +34,6 @@
+ 			"Name": "PluginUtils",
  			"Enabled": true
  		}
- 	]
+-	]
 -}
 \ No newline at end of file
++	],
++	"EnabledByDefault": true
 +}
 diff --git a/Plugins/PluginToolset/Source/PluginToolset/PluginToolset.Build.cs b/Plugins/PluginToolset/Source/PluginToolset/PluginToolset.Build.cs
 index dd9cd02..6b15bc5 100644
@@ -45284,6 +45710,37 @@ index 05a682b..0000000
 @@ -1 +0,0 @@
 -Hello!
 \ No newline at end of file
+diff --git a/Plugins/SlateInspectorToolset/SlateInspectorToolset.uplugin b/Plugins/SlateInspectorToolset/SlateInspectorToolset.uplugin
+index 739eddf..4a05760 100644
+--- a/Plugins/SlateInspectorToolset/SlateInspectorToolset.uplugin
++++ b/Plugins/SlateInspectorToolset/SlateInspectorToolset.uplugin
+@@ -14,19 +14,23 @@
+ 	"IsBetaVersion": false,
+ 	"IsExperimentalVersion": true,
+ 	"Installed": false,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Modules": [
+ 		{
+ 			"Name": "SlateInspectorToolset",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		},
+ 		{
+ 			"Name": "SlateInspectorToolsetTests",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "Default",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
 diff --git a/Plugins/SlateInspectorToolset/Source/SlateInspectorToolset/Private/SlateInspectorToolsetSubsystem.cpp b/Plugins/SlateInspectorToolset/Source/SlateInspectorToolset/Private/SlateInspectorToolsetSubsystem.cpp
 index 2c5f38e..69999c9 100644
 --- a/Plugins/SlateInspectorToolset/Source/SlateInspectorToolset/Private/SlateInspectorToolsetSubsystem.cpp
@@ -45875,6 +46332,28 @@ index 04c2907..b928681 100644
 +		});
  	}
  }
+diff --git a/Plugins/StateTreeToolset/StateTreeToolset.uplugin b/Plugins/StateTreeToolset/StateTreeToolset.uplugin
+index 0aa11c1..5d44d3a 100644
+--- a/Plugins/StateTreeToolset/StateTreeToolset.uplugin
++++ b/Plugins/StateTreeToolset/StateTreeToolset.uplugin
+@@ -16,13 +16,15 @@
+ 	"IsExperimentalVersion": true,
+ 	"NoRedist": true,
+ 	"Installed": false,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Modules": [
+ 		{
+ 			"Name": "StateTreeToolset",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
 diff --git a/Plugins/ToolsetRegistry/Content/Python/init_unreal.py b/Plugins/ToolsetRegistry/Content/Python/init_unreal.py
 new file mode 100644
 index 0000000..39f21c7
@@ -65649,13 +66128,53 @@ index f84b1a0..dcb5c1d 100644
  				"PythonScriptPlugin",
  				"UnrealEd",
 diff --git a/Plugins/ToolsetRegistry/ToolsetRegistry.uplugin b/Plugins/ToolsetRegistry/ToolsetRegistry.uplugin
-index da93d00..9eedc1b 100644
+index da93d00..cbe33f8 100644
 --- a/Plugins/ToolsetRegistry/ToolsetRegistry.uplugin
 +++ b/Plugins/ToolsetRegistry/ToolsetRegistry.uplugin
-@@ -39,4 +39,4 @@
+@@ -16,13 +16,15 @@
+ 	"IsExperimentalVersion": true,
+ 	"NoRedist": true,
+ 	"Installed": false,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Modules": [
+ 		{
+ 			"Name": "ToolsetRegistry",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "Default",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
+@@ -39,4 +41,4 @@
  			"Enabled": true
  		}
  	]
 -}
 \ No newline at end of file
 +}
+diff --git a/Plugins/WorldConditionsToolset/WorldConditionsToolset.uplugin b/Plugins/WorldConditionsToolset/WorldConditionsToolset.uplugin
+index 21120e7..3fb3fa5 100644
+--- a/Plugins/WorldConditionsToolset/WorldConditionsToolset.uplugin
++++ b/Plugins/WorldConditionsToolset/WorldConditionsToolset.uplugin
+@@ -16,13 +16,15 @@
+ 	"IsExperimentalVersion": true,
+ 	"NoRedist": true,
+ 	"Installed": false,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Modules": [
+ 		{
+ 			"Name": "WorldConditionsToolset",
+ 			"Type": "Editor",
+ 			"LoadingPhase": "PostEngineInit",
+-			"TargetAllowList": ["Editor"]
++			"TargetAllowList": [
++				"Editor"
++			]
+ 		}
+ 	],
+ 	"Plugins": [
