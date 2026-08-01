@@ -276,36 +276,6 @@ def ensure_sparse_source(manifest: dict[str, Any], ref_override: str | None = No
     return source_dir
 
 
-def remove_managed_uproject_plugins(uproject: Path, plugin_names: list[str]) -> None:
-    data = read_json(uproject)
-    managed = set(plugin_names)
-    entries = data.get("Plugins", [])
-    data["Plugins"] = [
-        entry for entry in entries
-        if not isinstance(entry, dict) or str(entry.get("Name", "")) not in managed
-    ]
-    new_text = json.dumps(data, indent="\t", ensure_ascii=False) + "\n"
-    old_text = uproject.read_text(encoding="utf-8", errors="replace")
-    if old_text.replace("\r\n", "\n") != new_text.replace("\r\n", "\n"):
-        uproject.write_text(new_text, encoding="utf-8")
-
-
-def set_project_plugin_defaults(plugins_dir: Path, enabled_plugin_names: list[str], disabled_plugin_names: list[str]) -> None:
-    disabled = set(disabled_plugin_names)
-    managed = set(enabled_plugin_names) | disabled
-    for name in managed:
-        descriptor_path = plugins_dir / name / f"{name}.uplugin"
-        if not descriptor_path.exists():
-            raise PortKitError(f"Installed plugin descriptor missing: {descriptor_path}")
-
-        descriptor = read_json(descriptor_path)
-        descriptor["EnabledByDefault"] = name not in disabled
-        descriptor_path.write_text(
-            json.dumps(descriptor, indent="\t", ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-
-
 def apply_patches(project_root: Path, manifest: dict[str, Any]) -> None:
     for patch_name in manifest.get("patches", []):
         patch_path = KIT_DIR / "patches" / patch_name
@@ -419,7 +389,7 @@ def write_generated_json_utilities_editor(dst: Path) -> None:
         "Description": "Generated UE 5.8 JsonUtilitiesEditor compatibility module for the MCP UE 5.7 port.",
         "Category": "Editor",
         "EditorOnly": True,
-        "EnabledByDefault": False,
+        "EnabledByDefault": True,
         "CanContainContent": False,
         "Installed": False,
         "Modules": [
@@ -612,12 +582,6 @@ def install(args: argparse.Namespace) -> None:
         log(f"Installing local plugin {plugin['name']}")
         sync_tree_filtered(src, dst, ignore_patterns)
 
-    enabled_plugins = [plugin["target"] for plugin in manifest["plugins"] if plugin.get("enable", True)]
-    enabled_plugins.extend(plugin["target"] for plugin in get_generated_plugins(manifest) if plugin.get("enable", True))
-    enabled_plugins.extend(plugin["target"] for plugin in get_local_plugins(manifest) if plugin.get("enable", True))
-    disabled_plugins = list(manifest.get("disabled_plugins", []))
-    set_project_plugin_defaults(plugins_dir, enabled_plugins, disabled_plugins)
-    remove_managed_uproject_plugins(uproject, enabled_plugins + disabled_plugins)
     build_project(project_root, uproject, engine_root)
     run_mcp_probe(project_root, uproject, engine_root, manifest)
     clean_tree(KIT_DIR / "temp")

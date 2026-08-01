@@ -27,8 +27,9 @@ The authoritative tool coverage report is `docs/ValidationReport.md`.
 
 These are intentional project additions on top of the UE 5.8 parity matrix:
 
-- `editor_toolset.toolsets.material.MaterialTools`: 18 project-owned Python
-  tools, including the atomic graph DSL read/validate/apply workflow.
+- `editor_toolset.toolsets.material.MaterialTools`: 28 project-owned Python
+  tools, including the atomic graph DSL read/validate/apply workflow and
+  compiled shader statistics.
 - `EditorToolset.EditorAppToolset.ExecuteConsoleCommand`: executes editor console commands such as `viewmode unlit`.
 - `editor_toolset.toolsets.asset.AssetTools.find_assets`: enhanced `name` matching. The same `name` argument supports both case-insensitive substring matching and wildcard matching with `*` / `?`.
 
@@ -42,11 +43,9 @@ Current report summary:
 - Registered parity toolsets: 40
 - Registered runtime toolsets including Material DSL: 41
 
-`install` enables supported manifest plugins in the target `.uproject` and
-disables manifest-declared unsupported plugins.
-The update is idempotent: existing entries are reused, supported entries are
-enabled, unsupported entries are disabled, and duplicate entries for the same
-plugin are collapsed.
+`install` applies the compatibility patch and copies the project-local plugin
+descriptors. `EnabledByDefault` in those descriptors is the activation policy;
+the installer does not rewrite the target `.uproject` plugin list.
 
 ## Covered By Current Port
 
@@ -55,7 +54,7 @@ the current patch/import flow:
 
 | Group | Coverage |
 | :--- | :--- |
-| `EditorToolset` | 251/251 + project extensions, including the 18-tool Material DSL surface |
+| `EditorToolset` | 251/251 + project extensions, including the 28-tool Material surface |
 | `PCGToolset` | 31/31 |
 | `AIModuleToolset` | 7/7 |
 | `AutomationTestToolset` | 7/7 |

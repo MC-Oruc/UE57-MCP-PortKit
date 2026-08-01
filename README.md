@@ -37,9 +37,10 @@ EditorToolset source. See [Material Graph DSL](docs/MaterialGraphDSL.md).
 
 This PortKit also carries project-specific usability extensions on top of the pinned UE 5.8 parity surface:
 
-- `editor_toolset.toolsets.material.MaterialTools`: an 18-tool Python material
-  surface including `get_graph_dsl_docs`, `read_graph_dsl`,
-  `validate_graph_dsl`, and `apply_graph_dsl`.
+- `editor_toolset.toolsets.material.MaterialTools`: a 28-tool Python material
+  surface. The six project additions are `get_graph_dsl_docs`, `read_graph_dsl`,
+  `get_graph_comments`, `validate_graph_dsl`, `apply_graph_dsl`, and
+  `get_statistics`.
 - `EditorToolset.EditorAppToolset.ExecuteConsoleCommand`: runs editor console commands such as `viewmode unlit`.
 - `editor_toolset.toolsets.asset.AssetTools.find_assets`: the existing `name` filter now matches both case-insensitive substring text and wildcard patterns with `*` / `?` in the same argument.
 
@@ -91,7 +92,7 @@ Run these commands inside the `Scripts/ModelContextProtocolPort` directory:
 
 | Command | Action / Behavior |
 | :--- | :--- |
-| **`python mcp_port_kit.py install`** | Main entrypoint. Performs environment checks, fetches UE 5.8 code, applies patches, enables plugins, and builds/verifies target. |
+| **`python mcp_port_kit.py install`** | Main entrypoint. Performs environment checks, fetches UE 5.8 code, applies the compatibility patch (including plugin defaults), and builds/verifies the target. |
 | **`python mcp_port_kit.py create-patch`** | Generates a new `0001-generated-ue57-port.patch` reflecting modifications made to the ported plugins inside your project. |
 | **`python mcp_port_kit.py doctor`** | Checks local environment status, verifies plugin registry, and validates the MCP schema output. |
 | **`python mcp_port_kit.py license-audit`** | Audit tool to verify Epic Games licensing guidelines are respected and no proprietary code is exposed. |
@@ -196,7 +197,7 @@ git submodule add https://github.com/MC-Oruc/UE57-MCP-PortKit.git Scripts/ModelC
 ```powershell
 python Scripts/ModelContextProtocolPort/mcp_port_kit.py install
 ```
-This script will fetch Epic Engine sources, port the plugins, patch incompatibilities, modify your `.uproject`, compile your Editor target, and print validation outputs.
+This script will fetch Epic Engine sources, port the plugins, apply the compatibility patch, compile your Editor target, and print validation outputs. Plugin activation is carried by each installed descriptor's `EnabledByDefault` value; the installer does not edit the project's plugin list.
 
 ---
 
