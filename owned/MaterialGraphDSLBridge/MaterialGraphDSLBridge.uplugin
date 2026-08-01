@@ -5,6 +5,7 @@
 	"FriendlyName": "Material Graph DSL Bridge",
 	"Description": "Project-owned native bridge and Python parser for atomic MCP material graph operations.",
 	"Category": "Editor",
+	"EnabledByDefault": true,
 	"CreatedBy": "MC-Oruc",
 	"CreatedByURL": "https://github.com/MC-Oruc",
 	"DocsURL": "https://github.com/MC-Oruc/UE57-MCP-PortKit#material-graph-dsl-bridge",

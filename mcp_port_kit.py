@@ -276,54 +276,34 @@ def ensure_sparse_source(manifest: dict[str, Any], ref_override: str | None = No
     return source_dir
 
 
-def update_uproject_plugins(uproject: Path, plugin_names: list[str], disabled_plugin_names: list[str] | None = None) -> None:
+def remove_managed_uproject_plugins(uproject: Path, plugin_names: list[str]) -> None:
     data = read_json(uproject)
-    entries = data.setdefault("Plugins", [])
-    requested = set(plugin_names)
-    disabled = set(disabled_plugin_names or [])
-    normalized: list[Any] = []
-    by_name: dict[str, dict[str, Any]] = {}
-
-    for entry in entries:
-        if not isinstance(entry, dict):
-            normalized.append(entry)
-            continue
-
-        name = str(entry.get("Name", ""))
-        if not name:
-            normalized.append(entry)
-            continue
-
-        existing = by_name.get(name)
-        if existing:
-            if name in requested:
-                existing.update(entry)
-                existing["Enabled"] = True
-            if name in disabled:
-                existing.update(entry)
-                existing["Enabled"] = False
-            continue
-
-        if name in requested:
-            entry["Enabled"] = True
-        if name in disabled:
-            entry["Enabled"] = False
-        by_name[name] = entry
-        normalized.append(entry)
-
-    for name in plugin_names:
-        if name not in by_name:
-            normalized.append({"Name": name, "Enabled": True, "TargetAllowList": ["Editor"]})
-
-    for name in disabled:
-        if name not in by_name:
-            normalized.append({"Name": name, "Enabled": False, "TargetAllowList": ["Editor"]})
-
-    data["Plugins"] = normalized
+    managed = set(plugin_names)
+    entries = data.get("Plugins", [])
+    data["Plugins"] = [
+        entry for entry in entries
+        if not isinstance(entry, dict) or str(entry.get("Name", "")) not in managed
+    ]
     new_text = json.dumps(data, indent="\t", ensure_ascii=False) + "\n"
     old_text = uproject.read_text(encoding="utf-8", errors="replace")
     if old_text.replace("\r\n", "\n") != new_text.replace("\r\n", "\n"):
         uproject.write_text(new_text, encoding="utf-8")
+
+
+def set_project_plugin_defaults(plugins_dir: Path, enabled_plugin_names: list[str], disabled_plugin_names: list[str]) -> None:
+    disabled = set(disabled_plugin_names)
+    managed = set(enabled_plugin_names) | disabled
+    for name in managed:
+        descriptor_path = plugins_dir / name / f"{name}.uplugin"
+        if not descriptor_path.exists():
+            raise PortKitError(f"Installed plugin descriptor missing: {descriptor_path}")
+
+        descriptor = read_json(descriptor_path)
+        descriptor["EnabledByDefault"] = name not in disabled
+        descriptor_path.write_text(
+            json.dumps(descriptor, indent="\t", ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
 
 
 def apply_patches(project_root: Path, manifest: dict[str, Any]) -> None:
@@ -635,7 +615,9 @@ def install(args: argparse.Namespace) -> None:
     enabled_plugins = [plugin["target"] for plugin in manifest["plugins"] if plugin.get("enable", True)]
     enabled_plugins.extend(plugin["target"] for plugin in get_generated_plugins(manifest) if plugin.get("enable", True))
     enabled_plugins.extend(plugin["target"] for plugin in get_local_plugins(manifest) if plugin.get("enable", True))
-    update_uproject_plugins(uproject, enabled_plugins, list(manifest.get("disabled_plugins", [])))
+    disabled_plugins = list(manifest.get("disabled_plugins", []))
+    set_project_plugin_defaults(plugins_dir, enabled_plugins, disabled_plugins)
+    remove_managed_uproject_plugins(uproject, enabled_plugins + disabled_plugins)
     build_project(project_root, uproject, engine_root)
     run_mcp_probe(project_root, uproject, engine_root, manifest)
     clean_tree(KIT_DIR / "temp")

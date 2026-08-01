@@ -5,6 +5,7 @@
 	"FriendlyName": "Blueprint Editor Bridge",
 	"Description": "Project-local Blueprint editor bridge for MCP BlueprintTools on UE 5.7.",
 	"Category": "Editor",
+	"EnabledByDefault": true,
 	"CreatedBy": "MC-Oruc",
 	"CreatedByURL": "https://github.com/MC-Oruc",
 	"DocsURL": "https://github.com/MC-Oruc/UE57-MCP-PortKit#blueprint-editor-bridge",
