@@ -66178,3 +66178,13 @@ index 21120e7..3fb3fa5 100644
  		}
  	],
  	"Plugins": [
+diff --git a/Plugins/MetaHumanGenerator/MetaHumanGenerator.uplugin b/Plugins/MetaHumanGenerator/MetaHumanGenerator.uplugin
+--- a/Plugins/MetaHumanGenerator/MetaHumanGenerator.uplugin
++++ b/Plugins/MetaHumanGenerator/MetaHumanGenerator.uplugin
+@@ -14,7 +14,7 @@
+ 	"IsBetaVersion": false,
+ 	"IsExperimentalVersion": true,
+ 	"Installed": false,
+-	"EnabledByDefault": false,
++	"EnabledByDefault": true,
+ 	"Modules": [
