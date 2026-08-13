@@ -38,10 +38,10 @@ They are not counted in the UE 5.8 parity sub-tool totals.
 Current report summary:
 
 - UE 5.8 total sub-tools: 853
-- Current UE 5.7 ported sub-tools: 414
-- Missing sub-tools: 439
-- Registered parity toolsets: 40
-- Registered runtime toolsets including Material DSL: 41
+- Current UE 5.7 ported sub-tools: 423
+- Missing sub-tools: 430
+- Registered parity toolsets: 41
+- Registered runtime toolsets including Material DSL: 42
 
 `install` applies the compatibility patch and copies the project-local plugin
 descriptors. `EnabledByDefault` in those descriptors is the activation policy;
@@ -64,6 +64,7 @@ the current patch/import flow:
 | `GameFeaturesToolset` | 7/7 |
 | `GameplayTagsToolset` | 6/6 |
 | `GASToolsets` | 14/14 |
+| `MetaHumanGenerator` | 9/9 |
 | `PhysicsToolsets` | 17/17 |
 | `PluginToolset` | 17/17 |
 | `SlateInspectorToolset` | 14/14 |
@@ -80,7 +81,6 @@ the current patch/import flow:
 | `DataflowAgent` | 0/22 | UE 5.8 uses public Dataflow edit helpers that are private/not available in UE 5.7. Needs a public adapter, not private header use. |
 | `MVVMToolset` | 0/9 | Needs deferred/lazy registration architecture. Short safe port was rolled back. |
 | `ChaosClothAssetToolset` | 0/6 | UE 5.8-only cloth asset editor API surface; skipped by rabbit-hole rule. |
-| `MetaHumanGenerator` | 0/9 | UE 5.8 Python expects `unreal.MetaHumanGeneratorSubsystemWrapper`, absent in UE 5.7. Requires a dedicated native bridge; disabled by default. |
 | `SemanticSearchToolset` | 0/2 | Depends on UE 5.8 `SemanticSearch` core plugin, absent in UE 5.7. |
 | `SequencerAnimMixerToolset` | 0/21 | Depends on UE 5.8 `MovieSceneAnimMixerScripting`, absent in UE 5.7. |
 

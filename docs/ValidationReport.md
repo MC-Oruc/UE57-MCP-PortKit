@@ -27,10 +27,10 @@ integration are carried in the generated compatibility patch.
 ## Summary
 
 - UE 5.8 total sub-tools: **853**
-- Available sub-tools: **414**
-- Missing sub-tools: **439**
-- Registered parity toolset count: **40**
-- Registered runtime toolset count including Material DSL: **41**
+- Available sub-tools: **423**
+- Missing sub-tools: **430**
+- Registered parity toolset count: **41**
+- Registered runtime toolset count including Material DSL: **42**
 
 ## Material DSL Validation
 
@@ -151,11 +151,11 @@ Group names are shown as sections instead of repeated table cells.
 | :--- | ---: | ---: | ---: | :--- |
 | `LiveCodingToolset` | 1 | 1 | 0 | 🟢 COMPLETE |
 
-### `MetaHumanGenerator` - 🔴 MISSING (0/9)
+### `MetaHumanGenerator` - 🟢 COMPLETE (9/9)
 
 | Toolset | UE 5.8 sub-tools | Available | Missing | Status |
 | :--- | ---: | ---: | ---: | :--- |
-| `MetaHumanToolset` | 9 | 0 | 9 | 🔴 MISSING - UE 5.7 does not expose `unreal.MetaHumanGeneratorSubsystemWrapper`; a native bridge is required. |
+| `MetaHumanToolset` | 9 | 9 | 0 | 🟢 COMPLETE - project-owned UE 5.7 native bridge and Python toolset are registered. |
 
 ### `MVVMToolset` - 🔴 MISSING (0/9)
 
@@ -1237,21 +1237,23 @@ Group names are shown as sections instead of repeated table cells.
 
 ### MetaHumanGenerator
 
-#### `MetaHumanToolset` - 🔴 MISSING
+#### `MetaHumanToolset` - 🟢 COMPLETE
 
 | UE 5.8 sub-tools | PortKit status | PortKit schema name |
 | :--- | :--- | :--- |
-| `begin_edit` | 🔴 Missing | 5.8 Python requires `unreal.MetaHumanGeneratorSubsystemWrapper`; UE 5.7 does not expose it. |
-| `create` | 🔴 Missing | 5.8 Python requires `unreal.MetaHumanGeneratorSubsystemWrapper`; UE 5.7 does not expose it. |
-| `end_edit` | 🔴 Missing | 5.8 Python requires `unreal.MetaHumanGeneratorSubsystemWrapper`; UE 5.7 does not expose it. |
-| `get_body_shape` | 🔴 Missing | 5.8 Python requires `unreal.MetaHumanGeneratorSubsystemWrapper`; UE 5.7 does not expose it. |
-| `get_eye_color` | 🔴 Missing | 5.8 Python requires `unreal.MetaHumanGeneratorSubsystemWrapper`; UE 5.7 does not expose it. |
-| `get_skin_tone` | 🔴 Missing | 5.8 Python requires `unreal.MetaHumanGeneratorSubsystemWrapper`; UE 5.7 does not expose it. |
-| `set_body_shape` | 🔴 Missing | 5.8 Python requires `unreal.MetaHumanGeneratorSubsystemWrapper`; UE 5.7 does not expose it. |
-| `set_eye_color` | 🔴 Missing | 5.8 Python requires `unreal.MetaHumanGeneratorSubsystemWrapper`; UE 5.7 does not expose it. |
-| `set_skin_tone` | 🔴 Missing | 5.8 Python requires `unreal.MetaHumanGeneratorSubsystemWrapper`; UE 5.7 does not expose it. |
+| `begin_edit` | 🟢 Available | `metahuman_toolset.metahuman.MetaHumanToolset.begin_edit` |
+| `create` | 🟢 Available | `metahuman_toolset.metahuman.MetaHumanToolset.create` |
+| `end_edit` | 🟢 Available | `metahuman_toolset.metahuman.MetaHumanToolset.end_edit` |
+| `get_body_shape` | 🟢 Available | `metahuman_toolset.metahuman.MetaHumanToolset.get_body_shape` |
+| `get_eye_color` | 🟢 Available | `metahuman_toolset.metahuman.MetaHumanToolset.get_eye_color` |
+| `get_skin_tone` | 🟢 Available | `metahuman_toolset.metahuman.MetaHumanToolset.get_skin_tone` |
+| `set_body_shape` | 🟢 Available | `metahuman_toolset.metahuman.MetaHumanToolset.set_body_shape` |
+| `set_eye_color` | 🟢 Available | `metahuman_toolset.metahuman.MetaHumanToolset.set_eye_color` |
+| `set_skin_tone` | 🟢 Available | `metahuman_toolset.metahuman.MetaHumanToolset.set_skin_tone` |
 
-Note: this toolset previously appeared available in the report. The failure was hidden because it did not break compilation. MCP probe confirmed a Python startup `AttributeError`. Disabled by default in PortKit installs. A separate native C++ MetaHuman bridge is required to make it usable.
+The current MCP probe confirms the Python registration and all 9 schemas. A
+MetaHuman character asset is still required before edit operations can be
+smoke-tested; no test asset was created during this validation.
 
 ### MVVMToolset
 
