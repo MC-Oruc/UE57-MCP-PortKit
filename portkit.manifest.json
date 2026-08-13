@@ -184,6 +184,12 @@
 			"source": "MaterialGraphDSLBridge",
 			"target": "MaterialGraphDSLBridge",
 			"enable": true
+		},
+		{
+			"name": "MetaHumanGenerator",
+			"source": "MetaHumanGenerator",
+			"target": "MetaHumanGenerator",
+			"enable": true
 		}
 	],
 	"generated_plugins": [

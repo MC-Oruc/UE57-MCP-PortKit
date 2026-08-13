@@ -628,6 +628,8 @@ def create_patch(args: argparse.Namespace) -> None:
         (temp_repo / "Plugins").mkdir(parents=True)
         for plugin in manifest["plugins"]:
             copy_tree_filtered(project_root / "Plugins" / plugin["target"], temp_repo / "Plugins" / plugin["target"], manifest["ignore_patterns"])
+        for plugin in get_local_plugins(manifest):
+            copy_tree_filtered(project_root / "Plugins" / plugin["target"], temp_repo / "Plugins" / plugin["target"], manifest["ignore_patterns"])
         for plugin in get_generated_plugins(manifest):
             copy_tree_filtered(project_root / "Plugins" / plugin["target"], temp_repo / "Plugins" / plugin["target"], manifest["ignore_patterns"])
 
